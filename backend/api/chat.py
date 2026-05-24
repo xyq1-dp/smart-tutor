@@ -5,17 +5,17 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from backend.llm.spark import spark_chat_stream
-from backend.db.models import ensure_user, get_profile
+from backend.db.models import ensure_user, get_profile, save_message, update_profile
+from backend.agents.profile_agent import extract_profile_from_chat
 
 router = APIRouter()
 
-# 画像维度定义（用于 system prompt）
-PROFILE_DIMENSIONS = {
-    "knowledge_level": "知识基础（入门/基础/进阶/熟练）",
-    "learning_goal": "学习目标（考证/求职/兴趣/课程要求）",
-    "cognitive_style": "认知风格（视觉型/文字型/动手型）",
-    "pace": "学习节奏偏好（快速/正常/细致）",
-    "weak_points": "知识薄弱点列表",
+PROFILE_LABELS = {
+    "knowledge_level": "知识基础",
+    "learning_goal": "学习目标",
+    "cognitive_style": "认知风格",
+    "pace": "学习节奏",
+    "weak_points": "薄弱点",
     "interest_areas": "兴趣方向",
 }
 
@@ -28,14 +28,15 @@ class ChatRequest(BaseModel):
 
 @router.post("/chat")
 async def chat(req: ChatRequest):
-    """对话接口 - 流式返回"""
+    """对话接口 - 流式返回 + 画像自动更新"""
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="消息不能为空")
 
-    # 构建 system prompt - 引导画像构建
+    ensure_user(req.user_id)
+
     system_prompt = {
         "role": "system",
-        "content": _build_system_prompt(req.history),
+        "content": _build_system_prompt(req.user_id),
     }
 
     messages = [system_prompt] + req.history + [
@@ -43,11 +44,41 @@ async def chat(req: ChatRequest):
     ]
 
     async def generate():
+        full_response = ""
         async for chunk in spark_chat_stream(messages):
             if chunk.startswith("[错误"):
                 yield f"data: {json.dumps({'error': chunk})}\n\n"
-                break
+                return
+            full_response += chunk
             yield f"data: {json.dumps({'content': chunk})}\n\n"
+
+        # 保存对话记录
+        try:
+            save_message(req.user_id, "user", req.message)
+            save_message(req.user_id, "assistant", full_response)
+        except Exception:
+            pass
+
+        # 从对话中提取画像并更新数据库
+        try:
+            all_history = req.history + [
+                {"role": "user", "content": req.message},
+                {"role": "assistant", "content": full_response},
+            ]
+            profile = await extract_profile_from_chat(req.user_id, all_history)
+            if profile and profile.get("confidence", 0) > 0.5:
+                update_fields = {}
+                for dim in ["knowledge_level", "learning_goal", "cognitive_style", "pace"]:
+                    if profile.get(dim):
+                        update_fields[dim] = profile[dim]
+                for dim in ["weak_points", "interest_areas"]:
+                    if profile.get(dim):
+                        update_fields[dim] = json.dumps(profile[dim], ensure_ascii=False)
+                if update_fields:
+                    update_profile(req.user_id, **update_fields)
+        except Exception:
+            pass
+
         yield f"data: {json.dumps({'done': True})}\n\n"
 
     return StreamingResponse(
@@ -57,15 +88,13 @@ async def chat(req: ChatRequest):
     )
 
 
-def _build_system_prompt(history: list[dict]) -> str:
-    """根据对话历史构建系统提示词"""
-    has_profile_info = any(
-        "学习目标" in msg.get("content", "")
-        or "知识基础" in msg.get("content", "")
-        for msg in history
-    )
+def _build_system_prompt(user_id: str) -> str:
+    """根据数据库中的画像构建系统提示词"""
+    profile = get_profile(user_id)
 
-    if not has_profile_info:
+    has_profile = profile and bool(profile.get("learning_goal"))
+
+    if not has_profile:
         return (
             "你是一个友好的个性化学习助手。你的首要任务是了解学生的学习情况，"
             "通过自然对话逐步收集以下信息：\n"
@@ -79,14 +108,38 @@ def _build_system_prompt(history: list[dict]) -> str:
             "用轻松友好的语气，像学长/学姐一样和学生聊天。\n"
             "回答始终用中文。"
         )
-    else:
-        return (
-            "你是一个专业的 Python 学习助手。你需要：\n"
-            "1. 根据学生的学习画像，提供个性化的学习建议和资源\n"
-            "2. 用清晰易懂的方式解释 Python 知识\n"
-            "3. 引导学生进行自主思考\n"
-            "4. 回答始终用中文，注意内容的准确性\n"
-        )
+
+    # 已建立画像，将画像信息注入 system prompt
+    parts = []
+    if profile.get("knowledge_level"):
+        parts.append(f"- 知识基础：{profile['knowledge_level']}")
+    if profile.get("learning_goal"):
+        parts.append(f"- 学习目标：{profile['learning_goal']}")
+    if profile.get("cognitive_style"):
+        parts.append(f"- 认知风格：{profile['cognitive_style']}")
+    if profile.get("pace"):
+        parts.append(f"- 学习节奏：{profile['pace']}")
+    for field in ["weak_points", "interest_areas"]:
+        raw = profile.get(field)
+        if raw and raw != "[]":
+            try:
+                items = json.loads(raw) if isinstance(raw, str) else raw
+                if items:
+                    parts.append(f"- {PROFILE_LABELS[field]}：{', '.join(items)}")
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+    profile_text = "\n".join(parts)
+
+    return (
+        "你是一个专业的 Python 学习助手。你需要：\n"
+        "1. 根据学生的学习画像，提供个性化的学习建议和资源\n"
+        "2. 用清晰易懂的方式解释 Python 知识\n"
+        "3. 引导学生进行自主思考\n"
+        "4. 回答始终用中文，注意内容的准确性\n\n"
+        f"当前学生画像：\n{profile_text}\n\n"
+        "请根据以上画像调整你的教学方式和推荐内容。"
+    )
 
 
 @router.get("/profile/{user_id}")

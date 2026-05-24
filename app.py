@@ -251,6 +251,7 @@ with tab_chat:
                 st.warning(full_response)
 
         st.session_state.messages.append({"role": "assistant", "content": full_response})
+        st.rerun()
 
 
 # --- 学习资源 Tab ---
