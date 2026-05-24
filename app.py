@@ -8,7 +8,6 @@ import requests
 import sys
 import os
 
-# 将 backend 加入 Python 路径
 sys.path.insert(0, os.path.dirname(__file__))
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8001")
@@ -23,69 +22,259 @@ st.set_page_config(
 # === 自定义样式 ===
 st.markdown("""
 <style>
+    /* ===== 全局 ===== */
     .main-header {
-        font-size: 1.8rem;
+        font-size: 1.7rem;
         font-weight: 700;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.25rem;
     }
     .sub-header {
-        color: #888;
-        font-size: 0.9rem;
-        margin-bottom: 1rem;
-    }
-    .chat-message {
-        padding: 1rem;
-        border-radius: 0.8rem;
+        color: #999;
+        font-size: 0.85rem;
         margin-bottom: 0.5rem;
     }
-    .user-message {
-        background: #e8f0fe;
-    }
-    .assistant-message {
-        background: #f5f5f5;
-    }
-    .resource-card {
-        border: 1px solid #e0e0e0;
-        border-radius: 0.8rem;
-        padding: 1rem;
-        margin-bottom: 0.5rem;
+
+    /* ===== 画像维度卡片 ===== */
+    .profile-card {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.45rem 0.6rem;
+        margin-bottom: 0.35rem;
+        border-radius: 0.5rem;
+        font-size: 0.85rem;
         transition: all 0.2s;
     }
-    .resource-card:hover {
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        border-color: #667eea;
+    .profile-card.filled {
+        background: linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 100%);
+        border-left: 3px solid #4caf50;
     }
-    .profile-tag {
+    .profile-card.empty {
+        background: #fafafa;
+        border-left: 3px solid #ddd;
+        color: #aaa;
+    }
+    .profile-card .icon {
+        font-size: 1rem;
+        width: 1.4rem;
+        text-align: center;
+    }
+    .profile-card .label {
+        font-weight: 600;
+        color: #444;
+        min-width: 3.2rem;
+    }
+    .profile-card.empty .label {
+        color: #bbb;
+    }
+    .profile-card .value {
+        color: #333;
+        flex: 1;
+        text-align: right;
+    }
+    .profile-card.empty .value {
+        color: #ccc;
+    }
+
+    /* ===== 模式徽章 ===== */
+    .mode-badge {
         display: inline-block;
-        background: #e8f0fe;
-        color: #1967d2;
-        padding: 0.2rem 0.6rem;
+        padding: 0.25rem 0.75rem;
         border-radius: 1rem;
         font-size: 0.8rem;
-        margin: 0.1rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
     }
+    .mode-badge.profile {
+        background: #fff3e0;
+        color: #e65100;
+        border: 1px solid #ffcc80;
+    }
+    .mode-badge.teaching {
+        background: #e8f5e9;
+        color: #2e7d32;
+        border: 1px solid #a5d6a7;
+    }
+
+    /* ===== 学习路径步骤条（侧边栏） ===== */
+    .path-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.35rem 0;
+        font-size: 0.82rem;
+    }
+    .path-dot {
+        width: 0.6rem;
+        height: 0.6rem;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .path-dot.done { background: #4caf50; }
+    .path-dot.current { background: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.25); }
+    .path-dot.pending { background: #ddd; }
+
+    /* ===== 资源卡片 ===== */
+    .resource-card {
+        border: 1px solid #e8e8e8;
+        border-radius: 0.75rem;
+        padding: 1.1rem 1rem;
+        margin-bottom: 0.6rem;
+        transition: all 0.25s;
+        cursor: pointer;
+        background: #fff;
+    }
+    .resource-card:hover {
+        box-shadow: 0 6px 20px rgba(102,126,234,0.12);
+        border-color: #667eea;
+        transform: translateY(-1px);
+    }
+    .resource-card .r-icon {
+        font-size: 1.6rem;
+        margin-bottom: 0.3rem;
+    }
+    .resource-card .r-title {
+        font-weight: 650;
+        font-size: 0.95rem;
+        margin-bottom: 0.15rem;
+    }
+    .resource-card .r-desc {
+        font-size: 0.8rem;
+        color: #999;
+    }
+    .resource-card .r-badge {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        border-radius: 0.7rem;
+        font-size: 0.72rem;
+        font-weight: 600;
+        margin-top: 0.4rem;
+    }
+    .badge-doc { background: #e3f2fd; color: #1565c0; }
+    .badge-mindmap { background: #f3e5f5; color: #7b1fa2; }
+    .badge-exercise { background: #fff3e0; color: #e65100; }
+    .badge-reading { background: #e8f5e9; color: #2e7d32; }
+    .badge-practice { background: #fce4ec; color: #c62828; }
+
+    /* ===== 聊天消息增强 ===== */
+    .extract-hint {
+        font-size: 0.75rem;
+        color: #999;
+        margin-top: 0.5rem;
+        padding: 0.4rem 0.7rem;
+        background: #fafafa;
+        border-radius: 0.4rem;
+        border: 1px dashed #e0e0e0;
+    }
+    .extract-hint strong {
+        color: #667eea;
+    }
+
+    /* ===== 学习路径时间线 ===== */
+    .timeline-stage {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 0.5rem;
+    }
+    .timeline-line {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex-shrink: 0;
+    }
+    .timeline-circle {
+        width: 1rem;
+        height: 1rem;
+        border-radius: 50%;
+        border: 2px solid #ddd;
+        background: #fff;
+        flex-shrink: 0;
+        margin-top: 0.25rem;
+    }
+    .timeline-circle.active {
+        border-color: #667eea;
+        background: #667eea;
+    }
+    .timeline-circle.done {
+        border-color: #4caf50;
+        background: #4caf50;
+    }
+    .timeline-bar {
+        width: 2px;
+        flex: 1;
+        background: #eee;
+        min-height: 1.5rem;
+    }
+    .timeline-bar.done {
+        background: #4caf50;
+    }
+    .timeline-body {
+        flex: 1;
+        padding-bottom: 1rem;
+    }
+    .timeline-body h4 {
+        margin: 0;
+        font-size: 0.95rem;
+    }
+    .timeline-body .topics {
+        font-size: 0.8rem;
+        color: #888;
+        margin-top: 0.15rem;
+    }
+    .timeline-body .hours {
+        font-size: 0.75rem;
+        color: #aaa;
+    }
+
+    /* ===== 进度环 ===== */
+    .progress-ring {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.6rem 0.8rem;
+        background: #f9f9ff;
+        border-radius: 0.6rem;
+        margin-bottom: 0.8rem;
+    }
+    .progress-ring .big-num {
+        font-size: 2rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    /* ===== 连接状态 ===== */
+    .conn-dot {
+        display: inline-block;
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 50%;
+        margin-right: 0.3rem;
+    }
+    .conn-dot.on { background: #4caf50; }
+    .conn-dot.off { background: #f44336; }
 </style>
 """, unsafe_allow_html=True)
 
 
-# === 侧边栏 — 学习画像面板 ===
+# ============================================================
+# === 侧边栏 ===
+# ============================================================
 with st.sidebar:
     st.markdown('<div class="main-header">🎓 智能学习助手</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-header">Python 程序设计基础</div>', unsafe_allow_html=True)
 
-    st.divider()
-
     # 用户身份
-    user_id = st.text_input("👤 用户ID", value="student_01", key="user_id_input")
+    user_id = st.text_input("👤 用户ID", value="student_01", key="user_id_input",
+                             label_visibility="collapsed")
 
     st.divider()
 
-    # 学习画像展示
-    st.subheader("📋 学习画像")
-
+    # ---- 后端连接检查 ----
     backend_ok = False
     try:
         resp = requests.get(f"{BACKEND_URL}/api/health", timeout=2)
@@ -94,20 +283,41 @@ with st.sidebar:
         backend_ok = False
 
     if backend_ok:
-        st.info("✅ 后端已连接")
+        st.markdown(
+            '<span class="conn-dot on"></span><span style="font-size:0.78rem;color:#666;">后端已连接</span>',
+            unsafe_allow_html=True,
+        )
     else:
-        st.warning("⚠️ 后端未启动")
+        st.markdown(
+            '<span class="conn-dot off"></span><span style="font-size:0.78rem;color:#c62828;">后端未启动</span>',
+            unsafe_allow_html=True,
+        )
 
-    # 从后端加载画像数据
-    profile_dims = [
-        ("知识基础", "未知"),
-        ("学习目标", "未设定"),
-        ("认知风格", "未设定"),
-        ("学习节奏", "正常"),
-        ("薄弱点", "待检测"),
-        ("兴趣方向", "待检测"),
-    ]
+    st.divider()
 
+    # ---- 学习画像 ----
+    st.subheader("📋 学习画像")
+
+    # 维度图标映射
+    DIM_ICONS = {
+        "知识基础": "📖",
+        "学习目标": "🎯",
+        "认知风格": "🧩",
+        "学习节奏": "⚡",
+        "薄弱点": "🔍",
+        "兴趣方向": "💡",
+    }
+    DIM_EMPTY = {
+        "知识基础": "未知",
+        "学习目标": "未设定",
+        "认知风格": "未设定",
+        "学习节奏": "正常",
+        "薄弱点": "待检测",
+        "兴趣方向": "待检测",
+    }
+
+    # 加载画像
+    profile_dims = []
     if backend_ok:
         try:
             dims_resp = requests.get(
@@ -121,25 +331,56 @@ with st.sidebar:
         except (requests.ConnectionError, requests.Timeout):
             pass
 
-    with st.expander("查看画像详情", expanded=False):
-        cols = st.columns(2)
-        for i, (label, value) in enumerate(profile_dims):
-            with cols[i % 2]:
-                st.markdown(f"**{label}**")
-                st.markdown(f'<span class="profile-tag">{value}</span>',
-                          unsafe_allow_html=True)
+    if not profile_dims:
+        profile_dims = [(k, v) for k, v in DIM_EMPTY.items()]
+
+    # 判断画像是否"有价值"（已从对话中提取过）
+    has_real_profile = any(
+        v not in ("未知", "未设定", "待检测", "", "beginner", "normal")
+        for _, v in profile_dims
+    )
+
+    # 画像模式徽章
+    if has_real_profile:
+        st.markdown(
+            '<div class="mode-badge teaching">🧠 个性化教学模式</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<div class="mode-badge profile">🔍 画像收集模式</div>',
+            unsafe_allow_html=True,
+        )
+
+    # 展示每个维度
+    for label, value in profile_dims:
+        is_filled = value not in ("未知", "未设定", "待检测", "", "beginner", "normal")
+        # 列表类维度特殊处理
+        if value in ("[]", "待检测"):
+            is_filled = False
+        css_class = "filled" if is_filled else "empty"
+        icon = DIM_ICONS.get(label, "📌")
+        st.markdown(
+            f'<div class="profile-card {css_class}">'
+            f'<span class="icon">{icon}</span>'
+            f'<span class="label">{label}</span>'
+            f'<span class="value">{value}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     st.divider()
 
-    # 学习路径导航（从后端加载）
+    # ---- 学习路径导航 ----
     st.subheader("🗺️ 学习路径")
+
     chapters = [
-        ("01", "Python 基础语法", "⬜"),
-        ("02", "流程控制", "⬜"),
-        ("03", "函数与模块", "⬜"),
-        ("04", "数据结构", "⬜"),
-        ("05", "面向对象编程", "⬜"),
-        ("06", "综合项目实战", "⬜"),
+        ("01", "Python 基础语法", "pending"),
+        ("02", "流程控制", "pending"),
+        ("03", "函数与模块", "pending"),
+        ("04", "数据结构", "pending"),
+        ("05", "面向对象编程", "pending"),
+        ("06", "综合项目实战", "pending"),
     ]
     if backend_ok:
         try:
@@ -147,22 +388,47 @@ with st.sidebar:
             if path_resp.status_code == 200:
                 path_data = path_resp.json()
                 chapters = [
-                    (f"0{s['order']}", s["title"], "⬜")
+                    (f"0{s['order']}", s["title"],
+                     "current" if s["order"] == 1 else "pending")
                     for s in path_data.get("stages", [])
                 ]
         except (requests.ConnectionError, requests.Timeout):
             pass
 
     for num, title, status in chapters:
-        st.markdown(f"**{num}** {title} {status}")
+        dot_class = {"done": "done", "current": "current", "pending": "pending"}
+        st.markdown(
+            f'<div class="path-item">'
+            f'<span class="path-dot {dot_class.get(status, "pending")}"></span>'
+            f'<span style="color:#888;font-size:0.75rem;width:1.4rem;">{num}</span>'
+            f'<span style="color:{"#333" if status != "pending" else "#bbb"};font-size:0.82rem;">{title}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
 
+# ============================================================
 # === 主面板 ===
-tab_chat, tab_resources, tab_path = st.tabs(["💬 对话学习", "📚 学习资源", "🗺️ 学习路径"])
+# ============================================================
+tab_chat, tab_resources, tab_path = st.tabs(
+    ["💬 对话学习", "📚 学习资源", "🗺️ 学习路径"]
+)
 
+# ============================================================
 # --- 对话学习 Tab ---
+# ============================================================
 with tab_chat:
-    st.markdown("### 与你的专属学习助手对话")
+    # 顶部模式提示
+    if has_real_profile:
+        st.markdown(
+            '<div class="mode-badge teaching">🧠 个性化教学模式 — 根据你的画像定制回复</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<div class="mode-badge profile">🔍 画像收集模式 — 告诉我你的学习情况，我会逐步了解你</div>',
+            unsafe_allow_html=True,
+        )
 
     # 初始化聊天记录
     if "messages" not in st.session_state:
@@ -184,19 +450,17 @@ with tab_chat:
 
     # 接收用户输入
     if prompt := st.chat_input("输入你的问题或回复..."):
-        # 显示用户消息
         with st.chat_message("user"):
             st.markdown(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
 
-        # 调用后端
         with st.chat_message("assistant"):
             if backend_ok:
                 try:
                     history = [
                         {"role": m["role"], "content": m["content"]}
                         for m in st.session_state.messages[:-1]
-                    ][-20:]  # 最近 20 条
+                    ][-20:]
 
                     resp = requests.post(
                         f"{BACKEND_URL}/api/chat",
@@ -232,21 +496,29 @@ with tab_chat:
                                     pass
 
                         placeholder.markdown(full_response)
+
+                        # 画像提取提示
+                        if not has_real_profile:
+                            st.markdown(
+                                '<div class="extract-hint">'
+                                '🔍 系统正在从对话中了解你的学习情况，'
+                                '侧边栏画像将<strong>自动更新</strong></div>',
+                                unsafe_allow_html=True,
+                            )
                     else:
                         full_response = f"抱歉，后端返回了错误（{resp.status_code}）。"
                         st.error(full_response)
                 except requests.ConnectionError:
-                    full_response = "⚠️ 后端服务未启动，请先运行 `python -m backend.main`"
+                    full_response = "⚠️ 后端服务未启动，请先运行 `uvicorn backend.main:app --port 8001`"
                     st.warning(full_response)
                 except requests.Timeout:
                     full_response = "⏱️ 请求超时，请稍后重试。"
                     st.error(full_response)
             else:
                 full_response = (
-                    f"⚠️ 后端服务离线模式。\n\n"
-                    f"你说：「{prompt}」\n\n"
-                    f"请先启动后端服务：`uvicorn backend.main:app --reload`\n"
-                    f"然后刷新页面。"
+                    "⚠️ 后端服务离线模式。\n\n"
+                    "请先启动后端服务：`uvicorn backend.main:app --port 8001`\n"
+                    "然后刷新页面。"
                 )
                 st.warning(full_response)
 
@@ -254,31 +526,51 @@ with tab_chat:
         st.rerun()
 
 
+# ============================================================
 # --- 学习资源 Tab ---
+# ============================================================
 with tab_resources:
     st.markdown("### 📚 个性化学习资源")
 
-    resource_types = [
-        ("📄", "课程讲解文档", "根据你的知识水平定制的详细讲解"),
-        ("🧠", "知识点思维导图", "用Mermaid格式生成的思维导图"),
-        ("✏️", "练习题目", "自适应难度的练习题"),
-        ("📚", "拓展阅读材料", "精选的进阶学习资料"),
-        ("💻", "代码实操案例", "带注释的实战代码示例"),
+    if has_real_profile:
+        st.markdown(
+            '<span style="font-size:0.85rem;color:#888;">根据你的画像为你精选以下资源</span>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            '<span style="font-size:0.85rem;color:#e65100;">先在对话中告诉助手你的学习情况，'
+            '系统将为你精准生成资源</span>',
+            unsafe_allow_html=True,
+        )
+
+    resources = [
+        ("📄", "课程讲解文档", "根据知识水平定制的详细讲解，含代码示例与思考题", "badge-doc", "文档"),
+        ("🧠", "知识点思维导图", "Mermaid 格式脑图，直观梳理知识脉络", "badge-mindmap", "脑图"),
+        ("✏️", "自适应练习题", "3道选择 + 2道代码题，难度根据你的水平浮动", "badge-exercise", "练习"),
+        ("📚", "拓展阅读材料", "精选书籍、博客、视频、官方文档推荐", "badge-reading", "阅读"),
+        ("💻", "代码实操案例", "真实场景项目，带逐行注释与扩展挑战", "badge-practice", "实操"),
     ]
 
-    for emoji, name, desc in resource_types:
-        with st.container():
+    cols = st.columns(len(resources))
+    for i, (emoji, name, desc, badge_class, tag) in enumerate(resources):
+        with cols[i]:
             st.markdown(f"""
             <div class="resource-card">
-                <strong>{emoji} {name}</strong><br>
-                <small style="color:#888;">{desc}</small>
+                <div class="r-icon">{emoji}</div>
+                <div class="r-title">{name}</div>
+                <div class="r-desc">{desc}</div>
+                <span class="r-badge {badge_class}">{tag}</span>
             </div>
             """, unsafe_allow_html=True)
 
-    st.info("💡 在对话 Tab 中告诉助手你想学习什么，系统将为你生成以上 5 种资源。")
+    st.divider()
+    st.caption("💡 以上资源将在第 3 周（多智能体编排）接入后端自动生成，目前为预览状态。")
 
 
+# ============================================================
 # --- 学习路径 Tab ---
+# ============================================================
 with tab_path:
     st.markdown("### 🗺️ 你的个性化学习路径")
 
@@ -287,19 +579,51 @@ with tab_path:
             resp = requests.get(f"{BACKEND_URL}/api/path/default", timeout=5)
             if resp.status_code == 200:
                 path_data = resp.json()
-                st.markdown(f"**课程：{path_data['course']}**")
+                stages = path_data.get("stages", [])
 
-                for stage in path_data["stages"]:
-                    with st.container():
-                        progress = "⬜" if stage["order"] > 1 else "🟢"
-                        st.markdown(f"""
-                        <div class="resource-card">
-                            <strong>{progress} 阶段 {stage['order']}：{stage['title']}</strong>
-                            <span style="float:right;color:#888;">预计 {stage['estimated_hours']}h</span><br>
-                            <small>{' · '.join(stage['topics'])}</small>
+                # 顶部总览
+                completed = 0
+                total = len(stages)
+                pct = int(completed / total * 100) if total > 0 else 0
+
+                st.markdown(
+                    f'<div class="progress-ring">'
+                    f'<span class="big-num">{pct}%</span>'
+                    f'<span style="color:#666;font-size:0.85rem;">'
+                    f'已完成 {completed}/{total} 个阶段 · 剩余约 {sum(s.get("estimated_hours", 0) for s in stages)} 小时</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+                # 时间线展示
+                for i, stage in enumerate(stages):
+                    order = stage.get("order", i + 1)
+                    title = stage.get("title", "")
+                    topics = stage.get("topics", [])
+                    hours = stage.get("estimated_hours", 0)
+
+                    if order == 1:
+                        circle = "active"
+                        bar = ""
+                    else:
+                        circle = ""
+                        bar = ""
+
+                    st.markdown(f"""
+                    <div class="timeline-stage">
+                        <div class="timeline-line">
+                            <div class="timeline-circle {circle}"></div>
+                            <div class="timeline-bar {bar}"></div>
                         </div>
-                        """, unsafe_allow_html=True)
+                        <div class="timeline-body">
+                            <h4>阶段 {order}：{title}</h4>
+                            <div class="topics">{' · '.join(topics)}</div>
+                            <div class="hours">⏱ 预计 {hours} 小时</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
         except requests.ConnectionError:
-            st.warning("⚠️ 后端未连接")
+            st.warning("⚠️ 后端未连接，无法加载学习路径。")
     else:
         st.warning("请启动后端服务查看学习路径。")
