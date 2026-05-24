@@ -1,0 +1,34 @@
+# ============================================
+# 软件杯 - 高等教育个性化学习智能体系统
+# Python 3.10+
+# ============================================
+
+# --- Web 框架 ---
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+streamlit>=1.35.0
+httpx>=0.27.0
+websockets>=12.0
+
+# --- 多智能体框架 ---
+langgraph>=0.2.0
+langchain>=0.3.0
+langchain-core>=0.3.0
+
+# --- 数据库 ---
+chromadb>=0.5.0
+sqlalchemy>=2.0.0
+
+# --- 讯飞星火 SDK ---
+# 注意：讯飞星火的官方 Python SDK
+websocket-client>=1.6.0
+
+# --- 数据处理 ---
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# --- 安全过滤 ---
+jieba>=0.42.0    # 中文分词，用于敏感词检测
+
+# --- 工具 ---
+python-dotenv>=1.0.0

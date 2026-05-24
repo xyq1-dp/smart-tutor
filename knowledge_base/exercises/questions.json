@@ -1,0 +1,219 @@
+{
+  "chapters": {
+    "01_basics": {
+      "title": "Python 基础语法",
+      "questions": [
+        {
+          "id": "1.1",
+          "type": "choice",
+          "difficulty": "easy",
+          "question": "在 Python 中，input() 函数返回的数据类型是什么？",
+          "options": ["int", "float", "str", "与输入内容有关"],
+          "answer": 2,
+          "explanation": "input() 函数的返回值始终是字符串（str）类型，即使输入的是数字，也需要用 int() 或 float() 转换。"
+        },
+        {
+          "id": "1.2",
+          "type": "choice",
+          "difficulty": "easy",
+          "question": "以下哪个不是 Python 的基本数据类型？",
+          "options": ["int", "float", "array", "bool"],
+          "answer": 2,
+          "explanation": "array（数组）不是 Python 的内置基本类型。Python 内置的基本类型包括 int, float, str, bool 等。数组类型在 array 模块或 numpy 中提供。"
+        },
+        {
+          "id": "1.3",
+          "type": "code",
+          "difficulty": "medium",
+          "question": "写出以下代码的输出结果：\nprint(10 // 3)\nprint(10 % 3)\nprint(2 ** 3)",
+          "answer": "3\n1\n8",
+          "explanation": "// 是整除（向下取整），% 是取余，** 是幂运算。10÷3=3余1，2³=8。"
+        }
+      ]
+    },
+    "02_control_flow": {
+      "title": "流程控制",
+      "questions": [
+        {
+          "id": "2.1",
+          "type": "choice",
+          "difficulty": "easy",
+          "question": "for i in range(5): 中，i 的取值是？",
+          "options": ["1到5", "0到5", "0到4", "1到4"],
+          "answer": 2,
+          "explanation": "range(5) 生成从 0 开始到 5 结束（不包括 5）的整数序列：0, 1, 2, 3, 4。"
+        },
+        {
+          "id": "2.2",
+          "type": "code",
+          "difficulty": "medium",
+          "question": "补全代码：用 for 循环计算 1 到 100 的和。\ntotal = 0\nfor i in range(1, ___):\n    total += i\nprint(total)",
+          "answer": "101",
+          "explanation": "range(1, 101) 生成 1 到 100 的整数。因为 range 的结束值不包含，所以要写 101。"
+        },
+        {
+          "id": "2.3",
+          "type": "choice",
+          "difficulty": "medium",
+          "question": "以下哪个场景最适合用 while 循环而不是 for 循环？",
+          "options": [
+            "遍历一个列表",
+            "重复 10 次操作",
+            "等待用户输入正确的密码",
+            "计算 1 到 100 的和"
+          ],
+          "answer": 2,
+          "explanation": "while 循环适合循环次数不确定的场景，比如等待用户输入正确。其他三个选项循环次数是确定的，用 for 更合适。"
+        }
+      ]
+    },
+    "03_functions": {
+      "title": "函数与模块",
+      "questions": [
+        {
+          "id": "3.1",
+          "type": "choice",
+          "difficulty": "easy",
+          "question": "以下函数定义正确的是？",
+          "options": [
+            "function add(a, b): return a+b",
+            "def add(a, b): return a+b",
+            "def add(a, b) { return a+b }",
+            "define add(a, b): return a+b"
+          ],
+          "answer": 1,
+          "explanation": "Python 定义函数使用 def 关键字，后面跟函数名和括号，冒号结尾。函数体需要缩进。"
+        },
+        {
+          "id": "3.2",
+          "type": "code",
+          "difficulty": "medium",
+          "question": "写出以下代码的输出：\ndef foo(x, lst=[]):\n    lst.append(x)\n    return lst\n\nprint(foo(1))\nprint(foo(2))",
+          "answer": "[1]\n[1, 2]",
+          "explanation": "Python 的默认参数只在函数定义时计算一次。lst 是可变对象，第二次调用 foo(2) 时 lst 已经是 [1]，所以追加后变成 [1, 2]。这是常见陷阱，应避免使用可变默认参数。"
+        },
+        {
+          "id": "3.3",
+          "type": "code",
+          "difficulty": "hard",
+          "question": "用 lambda 表达式写一个函数，接收两个参数，返回其中较大的那个。",
+          "answer": "lambda a, b: a if a > b else b",
+          "explanation": "lambda 表达式的基本语法是 lambda 参数: 返回值。这里使用了 Python 的三元表达式 a if condition else b。"
+        }
+      ]
+    },
+    "04_data_structures": {
+      "title": "数据结构",
+      "questions": [
+        {
+          "id": "4.1",
+          "type": "choice",
+          "difficulty": "easy",
+          "question": "以下哪些 Python 数据结构是可变的？",
+          "options": ["列表和元组", "列表和字典", "元组和字符串", "集合和元组"],
+          "answer": 1,
+          "explanation": "列表和字典是可变的（可以修改元素）。元组和字符串是不可变的。集合也可变，但不在正确选项中。"
+        },
+        {
+          "id": "4.2",
+          "type": "code",
+          "difficulty": "medium",
+          "question": "写出以下代码的输出：\nnumbers = [1, 2, 3, 4, 5]\nprint(numbers[1:4])\nprint(numbers[::-1])",
+          "answer": "[2, 3, 4]\n[5, 4, 3, 2, 1]",
+          "explanation": "切片 [1:4] 取索引 1~3（不包含4），[::-1] 是反转列表的常用写法。"
+        },
+        {
+          "id": "4.3",
+          "type": "choice",
+          "difficulty": "medium",
+          "question": "关于字典的键（key），以下说法正确的是？",
+          "options": [
+            "键可以是列表",
+            "键必须是不可变类型",
+            "键只能是字符串",
+            "键可以有重复"
+          ],
+          "answer": 1,
+          "explanation": "字典的键必须是不可变（hashable）类型，如字符串、数字、元组。列表是可变的，不能作为键。键必须唯一。"
+        }
+      ]
+    },
+    "05_oop": {
+      "title": "面向对象编程",
+      "questions": [
+        {
+          "id": "5.1",
+          "type": "choice",
+          "difficulty": "easy",
+          "question": "在 Python 中，实例方法的第一个参数通常叫什么？",
+          "options": ["this", "self", "cls", "that"],
+          "answer": 1,
+          "explanation": "Python 约定用 self 作为实例方法的第一个参数，代表实例本身。cls 用于类方法。this 是 Java/C++ 的写法。"
+        },
+        {
+          "id": "5.2",
+          "type": "choice",
+          "difficulty": "medium",
+          "question": "以下哪项描述了 Python 的多态？",
+          "options": [
+            "一个类只能有一个实例",
+            "子类重写父类的方法，实现不同的行为",
+            "把多个变量放在一起存储",
+            "用 @staticmethod 装饰的方法"
+          ],
+          "answer": 1,
+          "explanation": "多态（Polymorphism）允许不同的类定义同名方法，根据对象类型自动调用对应实现。子类重写父类方法是多态的典型体现。"
+        },
+        {
+          "id": "5.3",
+          "type": "code",
+          "difficulty": "hard",
+          "question": "写出以下代码的输出：\nclass A:\n    def f(self):\n        return 'A'\n\nclass B(A):\n    def f(self):\n        return 'B' + super().f()\n\nb = B()\nprint(b.f())",
+          "answer": "BA",
+          "explanation": "B 重写了 f()，其中 super().f() 调用父类 A 的 f() 返回 'A'，加上 'B' 得到 'BA'。"
+        }
+      ]
+    },
+    "06_projects": {
+      "title": "综合项目实战",
+      "questions": [
+        {
+          "id": "6.1",
+          "type": "choice",
+          "difficulty": "easy",
+          "question": "使用 with open('file.txt', 'w') as f: 的好处是什么？",
+          "options": [
+            "文件读写速度更快",
+            "文件会自动关闭，即使发生异常",
+            "可以同时读写多个文件",
+            "不需要指定编码"
+          ],
+          "answer": 1,
+          "explanation": "with 语句创建上下文管理器，无论是否发生异常，都会自动关闭文件，避免资源泄漏。这是 Python 推荐的文件操作方式。"
+        },
+        {
+          "id": "6.2",
+          "type": "code",
+          "difficulty": "medium",
+          "question": "以下代码的输出是什么？\nimport json\ndata = {'name': '张三', 'age': 20}\nprint(type(json.dumps(data)))",
+          "answer": "<class 'str'>",
+          "explanation": "json.dumps() 将 Python 字典序列化为 JSON 字符串。json.loads() 做反向操作。"
+        },
+        {
+          "id": "6.3",
+          "type": "choice",
+          "difficulty": "medium",
+          "question": "想逐行读取一个大文件且不占太多内存，最佳方法是？",
+          "options": [
+            "f.read().split('\\n')",
+            "f.readlines()",
+            "for line in f:",
+            "f.read().splitlines()"
+          ],
+          "answer": 2,
+          "explanation": "for line in f 是迭代器方式，每次只在内存中保留一行。其他方法会一次性读入整个文件，大文件会撑爆内存。"
+        }
+      ]
+    }
+  }
+}
