@@ -3,6 +3,7 @@ Streamlit 前端 — 个性化学习智能助手
 """
 
 import json
+import re
 import streamlit as st
 import requests
 import sys
@@ -532,40 +533,146 @@ with tab_chat:
 with tab_resources:
     st.markdown("### 📚 个性化学习资源")
 
-    if has_real_profile:
-        st.markdown(
-            '<span style="font-size:0.85rem;color:#888;">根据你的画像为你精选以下资源</span>',
-            unsafe_allow_html=True,
+    RESOURCE_INFO = {
+        "doc": ("📄", "课程讲解文档", "badge-doc"),
+        "mindmap": ("🧠", "知识点思维导图", "badge-mindmap"),
+        "exercise": ("✏️", "自适应练习题", "badge-exercise"),
+        "reading": ("📚", "拓展阅读材料", "badge-reading"),
+        "practice": ("💻", "代码实操案例", "badge-practice"),
+    }
+
+    # ---- 资源生成操作区 ----
+    col_topic, col_btn = st.columns([3, 1])
+    with col_topic:
+        topic = st.text_input(
+            "知识点主题",
+            placeholder="例如：Python 列表推导式、函数参数、面向对象...",
+            key="resource_topic",
         )
-    else:
-        st.markdown(
-            '<span style="font-size:0.85rem;color:#e65100;">先在对话中告诉助手你的学习情况，'
-            '系统将为你精准生成资源</span>',
-            unsafe_allow_html=True,
-        )
+    with col_btn:
+        st.write("")  # 对齐
+        generate_btn = st.button("🚀 生成资源", type="primary", use_container_width=True,
+                                  disabled=not backend_ok or not topic.strip())
 
-    resources = [
-        ("📄", "课程讲解文档", "根据知识水平定制的详细讲解，含代码示例与思考题", "badge-doc", "文档"),
-        ("🧠", "知识点思维导图", "Mermaid 格式脑图，直观梳理知识脉络", "badge-mindmap", "脑图"),
-        ("✏️", "自适应练习题", "3道选择 + 2道代码题，难度根据你的水平浮动", "badge-exercise", "练习"),
-        ("📚", "拓展阅读材料", "精选书籍、博客、视频、官方文档推荐", "badge-reading", "阅读"),
-        ("💻", "代码实操案例", "真实场景项目，带逐行注释与扩展挑战", "badge-practice", "实操"),
-    ]
+    # ---- 类型预览卡片 ----
+    with st.expander("📋 支持的资源类型", expanded=not topic.strip()):
+        type_cols = st.columns(5)
+        for i, (rtype, (emoji, name, badge_class)) in enumerate(RESOURCE_INFO.items()):
+            with type_cols[i]:
+                st.markdown(f"""
+                <div class="resource-card" style="text-align:center;">
+                    <div class="r-icon">{emoji}</div>
+                    <div class="r-title">{name}</div>
+                    <span class="r-badge {badge_class}">{rtype}</span>
+                </div>
+                """, unsafe_allow_html=True)
 
-    cols = st.columns(len(resources))
-    for i, (emoji, name, desc, badge_class, tag) in enumerate(resources):
-        with cols[i]:
-            st.markdown(f"""
-            <div class="resource-card">
-                <div class="r-icon">{emoji}</div>
-                <div class="r-title">{name}</div>
-                <div class="r-desc">{desc}</div>
-                <span class="r-badge {badge_class}">{tag}</span>
-            </div>
-            """, unsafe_allow_html=True)
+    # ---- 生成资源 ----
+    if generate_btn and topic.strip():
+        st.divider()
+        st.markdown(f"#### 🔄 正在为 **「{topic}」** 生成资源...")
 
-    st.divider()
-    st.caption("💡 以上资源将在第 3 周（多智能体编排）接入后端自动生成，目前为预览状态。")
+        progress_bar = st.progress(0, text="准备中...")
+        status_area = st.empty()
+
+        # 用于存放已生成资源内容的容器
+        result_containers = {
+            rtype: st.empty() for rtype in RESOURCE_INFO
+        }
+
+        try:
+            resp = requests.post(
+                f"{BACKEND_URL}/api/resource/generate",
+                json={
+                    "topic": topic,
+                    "user_id": user_id,
+                    "resource_types": list(RESOURCE_INFO.keys()),
+                },
+                stream=True,
+                timeout=300,
+            )
+
+            if resp.status_code == 200:
+                generated_count = 0
+                total_count = 5
+                current_type = None
+                full_result = None
+
+                for line in resp.iter_lines():
+                    if not line:
+                        continue
+                    line = line.decode("utf-8")
+                    if line.startswith("data: "):
+                        try:
+                            event = json.loads(line[6:])
+                            stage = event.get("stage", "")
+
+                            if stage == "kb_search":
+                                status_area.info(f"🔍 {event.get('message', '')}")
+
+                            elif stage == "agent_start":
+                                current_type = event.get("type", "")
+                                info = RESOURCE_INFO.get(current_type, ("", "", ""))
+                                status_area.info(f"⏳ 正在生成：{info[0]} {info[1]}...")
+
+                            elif stage == "agent_done":
+                                generated_count += 1
+                                pct = int(generated_count / total_count * 100)
+                                progress_bar.progress(
+                                    pct, text=f"已完成 {generated_count}/{total_count}"
+                                )
+                                status_area.success(
+                                    f"✅ 已完成：{event.get('type', '')}"
+                                )
+
+                            elif stage == "agent_error":
+                                status_area.warning(
+                                    f"⚠️ {event.get('type', '')} 生成失败: {event.get('error', '')}"
+                                )
+
+                            elif stage == "result":
+                                full_result = event.get("data", {})
+                                progress_bar.progress(100, text="全部完成！")
+
+                            elif event.get("done"):
+                                break
+
+                        except json.JSONDecodeError:
+                            pass
+
+                # 展示生成的资源
+                if full_result and full_result.get("resources"):
+                    st.success(f"✅ 已为「{topic}」生成 {len(full_result['resources'])} 个资源！")
+
+                    for rtype, content in full_result["resources"].items():
+                        emoji, name, badge_class = RESOURCE_INFO.get(rtype, ("📌", rtype, ""))
+                        with st.expander(f"{emoji} {name}", expanded=False):
+                            # 思维导图特殊处理：尝试渲染 Mermaid
+                            if rtype == "mindmap" and "```mermaid" in content:
+                                m_match = re.search(
+                                    r'```mermaid\s*\n(.*?)```', content, re.DOTALL
+                                )
+                                if m_match:
+                                    st.markdown(content)
+                                else:
+                                    st.markdown(content)
+                            else:
+                                st.markdown(content)
+
+                elif full_result and full_result.get("errors"):
+                    st.error(f"生成过程中出现错误：{full_result['errors']}")
+                else:
+                    st.warning("未能获取资源结果，请重试。")
+
+            else:
+                st.error(f"后端返回错误（{resp.status_code}）")
+
+        except requests.ConnectionError:
+            st.error("⚠️ 后端未连接，请启动后端服务。")
+        except requests.Timeout:
+            st.error("⏱️ 生成超时，请尝试更小的知识点范围。")
+        except Exception as e:
+            st.error(f"生成失败：{str(e)}")
 
 
 # ============================================================

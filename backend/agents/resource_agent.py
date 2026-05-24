@@ -9,6 +9,8 @@
 5. practice — 代码实操案例
 """
 
+import json
+
 from backend.llm.spark import spark_chat
 from backend.utils.anti_hallucination import verify_against_knowledge_base
 
@@ -121,12 +123,26 @@ async def generate_resource(
     if not prompt_template:
         return f"不支持的资源类型：{resource_type}"
 
+    # 处理 DB 中 JSON 字符串格式的字段
+    wp = profile.get("weak_points", [])
+    if isinstance(wp, str):
+        try:
+            wp = json.loads(wp)
+        except (json.JSONDecodeError, TypeError):
+            wp = []
+    ia = profile.get("interest_areas", [])
+    if isinstance(ia, str):
+        try:
+            ia = json.loads(ia)
+        except (json.JSONDecodeError, TypeError):
+            ia = []
+
     prompt = prompt_template.format(
         profile=str(profile),
         topic=topic,
         level=profile.get("knowledge_level", "beginner"),
-        weak_points=", ".join(profile.get("weak_points", [])),
-        interests=", ".join(profile.get("interest_areas", [])),
+        weak_points=", ".join(wp) if wp else "无",
+        interests=", ".join(ia) if ia else "未指定",
     )
 
     content = await spark_chat(
