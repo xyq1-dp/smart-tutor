@@ -37,7 +37,7 @@ PATH_PLANNING_PROMPT = """你是一位课程设计专家。请根据以下信息
   "path": [
     {{
       "order": 1,
-      "chapter": "章节名",
+      "title": "章节名",
       "topics": ["必学知识点"],
       "estimated_hours": 4,
       "priority": "high/medium/low",

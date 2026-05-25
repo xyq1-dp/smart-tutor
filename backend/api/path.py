@@ -6,6 +6,15 @@ from pydantic import BaseModel
 router = APIRouter()
 
 
+def _normalize_stages(path: list[dict]) -> list[dict]:
+    """兼容 LLM 返回的不同字段名（chapter ↔ title），并排序"""
+    for s in path:
+        if "title" not in s and "chapter" in s:
+            s["title"] = s.pop("chapter")
+    path.sort(key=lambda s: s.get("order", 0))
+    return path
+
+
 class PathRequest(BaseModel):
     user_id: str
 
@@ -40,7 +49,7 @@ async def get_personalized_path(user_id: str):
             "starting_point": result.get("starting_point", ""),
             "total_estimated_hours": result.get("total_estimated_hours", 42),
             "weekly_plan": result.get("weekly_plan", ""),
-            "stages": result.get("path", []),
+            "stages": _normalize_stages(result.get("path", [])),
         }
     except Exception as e:
         return _default_path(f"路径规划失败: {str(e)}")
@@ -69,7 +78,7 @@ async def regenerate_path(req: PathRequest):
             "starting_point": result.get("starting_point", ""),
             "total_estimated_hours": result.get("total_estimated_hours", 42),
             "weekly_plan": result.get("weekly_plan", ""),
-            "stages": result.get("path", []),
+            "stages": _normalize_stages(result.get("path", [])),
         }
     except HTTPException:
         raise
