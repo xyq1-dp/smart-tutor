@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from backend.llm.spark import spark_chat_stream
 from backend.db.models import ensure_user, get_profile, save_message, update_profile
 from backend.agents.profile_agent import extract_profile_from_chat
+from backend.agents.tutor_agent import _is_tutor_question, build_tutor_prompt
 
 router = APIRouter()
 
@@ -33,11 +34,18 @@ async def chat(req: ChatRequest):
         raise HTTPException(status_code=400, detail="消息不能为空")
 
     ensure_user(req.user_id)
+    profile = get_profile(req.user_id)
+    has_profile = profile and bool(profile.get("learning_goal"))
 
-    system_prompt = {
-        "role": "system",
-        "content": _build_system_prompt(req.user_id),
-    }
+    # 检测是否为辅导模式（有画像 + 知识性提问）
+    is_tutor_mode = has_profile and _is_tutor_question(req.message)
+
+    if is_tutor_mode:
+        system_content = build_tutor_prompt(req.user_id, req.message)
+    else:
+        system_content = _build_system_prompt(req.user_id)
+
+    system_prompt = {"role": "system", "content": system_content}
 
     messages = [system_prompt] + req.history + [
         {"role": "user", "content": req.message}
@@ -79,7 +87,7 @@ async def chat(req: ChatRequest):
         except Exception:
             pass
 
-        yield f"data: {json.dumps({'done': True})}\n\n"
+        yield f"data: {json.dumps({'done': True, 'tutor_mode': is_tutor_mode})}\n\n"
 
     return StreamingResponse(
         generate(),

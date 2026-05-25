@@ -13,6 +13,52 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8001")
 
+# === Mermaid 渲染工具 ===
+MERMAID_TPL = """<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>body{{margin:0;padding:12px;background:#fafafa;}} .mermaid{{text-align:center;}}</style>
+</head><body>
+<div class="mermaid">{code}</div>
+<script>mermaid.initialize({{startOnLoad:true,theme:'default'}});</script>
+</body></html>"""
+
+
+def _render_markdown(content: str):
+    """渲染 Markdown，自动处理 Mermaid 图表"""
+    # 查找 mermaid 代码块
+    pattern = r'```mermaid\s*\n(.*?)```'
+    mermaid_blocks = list(re.finditer(pattern, content, re.DOTALL))
+
+    if not mermaid_blocks:
+        st.markdown(content)
+        return
+
+    # 拆分渲染
+    last_end = 0
+    for match in mermaid_blocks:
+        # 渲染前面的普通 markdown
+        before = content[last_end:match.start()].strip()
+        if before:
+            st.markdown(before)
+
+        # 渲染 Mermaid 图
+        mermaid_code = match.group(1).strip()
+        try:
+            import streamlit.components.v1 as components
+            html = MERMAID_TPL.format(code=mermaid_code)
+            components.html(html, height=300, scrolling=True)
+        except Exception:
+            st.code(mermaid_code, language="mermaid")
+
+        last_end = match.end()
+
+    # 渲染剩余内容
+    after = content[last_end:].strip()
+    if after:
+        st.markdown(after)
+
 st.set_page_config(
     page_title="智能学习助手",
     page_icon="🎓",
@@ -458,7 +504,7 @@ with tab_chat:
     # 展示历史消息
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
+            _render_markdown(msg["content"])
 
     # 接收用户输入
     if prompt := st.chat_input("输入你的问题或回复..."):
@@ -488,6 +534,7 @@ with tab_chat:
                     if resp.status_code == 200:
                         full_response = ""
                         placeholder = st.empty()
+                        is_tutor = False
 
                         for line in resp.iter_lines():
                             if not line:
@@ -500,6 +547,7 @@ with tab_chat:
                                         full_response = data["error"]
                                         placeholder.error(full_response)
                                     elif data.get("done"):
+                                        is_tutor = data.get("tutor_mode", False)
                                         break
                                     elif data.get("content"):
                                         full_response += data["content"]
@@ -508,6 +556,14 @@ with tab_chat:
                                     pass
 
                         placeholder.markdown(full_response)
+
+                        # 辅导模式提示
+                        if is_tutor:
+                            st.markdown(
+                                '<div class="extract-hint" style="border-color:#667eea;background:#f5f7ff;">'
+                                '🧑‍🏫 <strong>辅导模式</strong> · 已根据你的画像生成结构化答疑</div>',
+                                unsafe_allow_html=True,
+                            )
 
                         # 画像提取提示
                         if not has_real_profile:
@@ -658,17 +714,7 @@ with tab_resources:
                     for rtype, content in full_result["resources"].items():
                         emoji, name, badge_class = RESOURCE_INFO.get(rtype, ("📌", rtype, ""))
                         with st.expander(f"{emoji} {name}", expanded=False):
-                            # 思维导图特殊处理：尝试渲染 Mermaid
-                            if rtype == "mindmap" and "```mermaid" in content:
-                                m_match = re.search(
-                                    r'```mermaid\s*\n(.*?)```', content, re.DOTALL
-                                )
-                                if m_match:
-                                    st.markdown(content)
-                                else:
-                                    st.markdown(content)
-                            else:
-                                st.markdown(content)
+                            _render_markdown(content)
 
                 elif full_result and full_result.get("errors"):
                     st.error(f"生成过程中出现错误：{full_result['errors']}")
