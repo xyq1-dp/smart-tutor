@@ -553,6 +553,12 @@ with st.sidebar:
             ("05", "面向对象编程", "pending"),
             ("06", "综合项目实战", "pending"),
         ]
+    else:
+        # 根据实际进度调整状态：priority=done → status=done
+        chapters = [
+            (num, title, "done" if status == "done" else status)
+            for num, title, status in chapters
+        ]
 
     for num, title, status in chapters:
         dot_class = {"done": "done", "current": "current", "pending": "pending"}
@@ -911,7 +917,7 @@ with tab_path:
                     )
 
             # 顶部总览
-            completed = 0
+            completed = sum(1 for s in stages if s.get("priority") == "done")
             total = len(stages)
             pct = int(completed / total * 100) if total > 0 else 0
 
@@ -938,7 +944,10 @@ with tab_path:
                 priority = stage.get("priority", "medium")
                 tips = stage.get("tips", "")
 
-                if order == 1:
+                if priority == "done":
+                    circle = "done"
+                    bar = "done"
+                elif order == 1:
                     circle = "active"
                     bar = ""
                 else:

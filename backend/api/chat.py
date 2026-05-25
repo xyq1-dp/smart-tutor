@@ -80,9 +80,9 @@ async def chat(req: ChatRequest):
         except Exception:
             pass
 
-        # 记录学习行为
+        # 记录学习行为 + 更新学习进度
         try:
-            from backend.db.models import record_behavior
+            from backend.db.models import record_behavior, detect_topic_chapter, update_topic_progress
             btype = "tutor_question" if is_tutor_mode else "chat"
             topic_keywords = []
             for kw in ["列表", "字典", "函数", "类", "循环", "条件", "异常",
@@ -95,6 +95,11 @@ async def chat(req: ChatRequest):
                 "topics": topic_keywords,
                 "response_len": len(full_response),
             })
+            # 辅导模式自动标记知识点为学习中
+            if is_tutor_mode:
+                chapter = detect_topic_chapter(req.message)
+                if chapter:
+                    update_topic_progress(req.user_id, chapter, "in_progress")
         except Exception:
             pass
 

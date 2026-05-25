@@ -24,12 +24,16 @@ PATH_PLANNING_PROMPT = """你是一位课程设计专家。请根据以下信息
 - 薄弱点：{weak_points}
 - 兴趣方向：{interest_areas}
 
+当前学习进度：
+{chapter_progress}
+
 要求：
-1. 判断学生当前应从哪里开始（可以跳过已掌握的内容）
+1. 根据学习进度判断学生当前应从哪里开始（已完成的可跳过，进行中的降低优先级）
 2. 为每个阶段设定具体的学习目标
 3. 估算每个阶段的建议学时
 4. 标注哪些是需要重点攻克的内容
 5. 根据学习节奏调整每个阶段的时长
+6. 已完成章节的 priority 设为 "done"
 
 请用 JSON 格式返回：
 {{
@@ -68,12 +72,24 @@ async def plan_learning_path(profile: dict) -> dict:
     if isinstance(interest_areas, str):
         interest_areas = json.loads(interest_areas) if interest_areas else []
 
+    # 构建进度文本
+    chapter_progress = profile.get("_chapter_progress", {})
+    if chapter_progress:
+        progress_lines = []
+        for ch, status in chapter_progress.items():
+            label = {"completed": "✅ 已完成", "in_progress": "🔄 学习中", "not_started": "⬜ 未开始"}
+            progress_lines.append(f"- {ch}：{label.get(status, status)}")
+        progress_text = "\n".join(progress_lines)
+    else:
+        progress_text = "暂无学习记录"
+
     prompt = PATH_PLANNING_PROMPT.format(
         knowledge_level=profile.get("knowledge_level", "beginner"),
         learning_goal=profile.get("learning_goal", "掌握 Python 基础"),
         pace=profile.get("pace", "normal"),
         weak_points=", ".join(weak_points) if weak_points else "无",
         interest_areas=", ".join(interest_areas) if interest_areas else "通用",
+        chapter_progress=progress_text,
     )
 
     result = await spark_chat(

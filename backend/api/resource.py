@@ -72,14 +72,17 @@ async def generate_resource(req: ResourceRequest):
         except Exception as e:
             result = {"topic": req.topic, "resources": {}, "errors": [str(e)]}
 
-        # 记录学习行为
+        # 记录学习行为 + 更新学习进度
         try:
-            from backend.db.models import record_behavior
+            from backend.db.models import record_behavior, detect_topic_chapter, update_topic_progress
             record_behavior(req.user_id, "resource_generate", {
                 "topic": req.topic,
                 "types": requested,
                 "success_count": len(result.get("resources", {})),
             })
+            chapter = detect_topic_chapter(req.topic)
+            if chapter:
+                update_topic_progress(req.user_id, chapter, "in_progress")
         except Exception:
             pass
 

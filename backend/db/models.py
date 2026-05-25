@@ -305,3 +305,109 @@ def get_assessment_history(user_id: str, limit: int = 10) -> list[dict]:
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows
+
+
+# === 学习进度追踪 ===
+
+# 知识点关键词 → 课程章节映射
+TOPIC_CHAPTER_MAP = {
+    "变量": "Python 基础语法", "类型": "Python 基础语法", "输入输出": "Python 基础语法",
+    "运算符": "Python 基础语法", "字符串": "Python 基础语法", "基础语法": "Python 基础语法",
+    "print": "Python 基础语法", "input": "Python 基础语法",
+
+    "if": "流程控制", "for": "流程控制", "while": "流程控制",
+    "循环": "流程控制", "条件": "流程控制", "break": "流程控制",
+    "continue": "流程控制", "流程控制": "流程控制",
+
+    "函数": "函数与模块", "参数": "函数与模块", "作用域": "函数与模块",
+    "模块": "函数与模块", "lambda": "函数与模块", "装饰器": "函数与模块",
+    "返回值": "函数与模块",
+
+    "列表": "数据结构", "元组": "数据结构", "字典": "数据结构",
+    "集合": "数据结构", "推导": "数据结构", "数据结构": "数据结构",
+    "切片": "数据结构",
+
+    "类": "面向对象编程", "继承": "面向对象编程", "多态": "面向对象编程",
+    "异常": "面向对象编程", "OOP": "面向对象编程", "面向对象": "面向对象编程",
+    "__init__": "面向对象编程", "魔法方法": "面向对象编程",
+
+    "项目": "综合项目实战", "文件": "综合项目实战", "第三方库": "综合项目实战",
+    "实战": "综合项目实战", "综合": "综合项目实战", "pip": "综合项目实战",
+    "调试": "综合项目实战",
+}
+
+
+def detect_topic_chapter(text: str) -> str | None:
+    """从文本中检测知识点对应的章节，返回章节名或 None"""
+    for keyword, chapter in TOPIC_CHAPTER_MAP.items():
+        if keyword.lower() in text.lower():
+            return chapter
+    return None
+
+
+def update_topic_progress(user_id: str, topic: str, status: str = "in_progress",
+                          score: float = 0) -> None:
+    """更新知识点学习进度（upsert）"""
+    conn = get_db()
+    cur = conn.execute(
+        "SELECT id, status FROM learning_progress WHERE user_id = ? AND topic = ?",
+        (user_id, topic),
+    )
+    row = cur.fetchone()
+    if row:
+        # 不降级：completed 保持 completed
+        new_status = status
+        if row["status"] == "completed" and status != "completed":
+            new_status = "completed"
+        conn.execute(
+            "UPDATE learning_progress SET status = ?, score = MAX(score, ?), "
+            "completed_at = CASE WHEN ? = 'completed' THEN datetime('now') ELSE completed_at END "
+            "WHERE id = ?",
+            (new_status, score, status, row["id"]),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO learning_progress (user_id, topic, status, score, completed_at) "
+            "VALUES (?, ?, ?, ?, CASE WHEN ? = 'completed' THEN datetime('now') ELSE NULL END)",
+            (user_id, topic, status, score, status),
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_all_topic_progress(user_id: str) -> list[dict]:
+    """获取用户所有知识点进度"""
+    conn = get_db()
+    cur = conn.execute(
+        "SELECT * FROM learning_progress WHERE user_id = ? ORDER BY id",
+        (user_id,),
+    )
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_chapter_progress(user_id: str) -> dict[str, str]:
+    """汇总各章节的学习状态，返回 {chapter_name: status}"""
+    topic_rows = get_all_topic_progress(user_id)
+    chapter_status = {}
+    for row in topic_rows:
+        topic = row["topic"]
+        status = row["status"]
+        # 找这个 topic 属于哪个 chapter
+        chapter = None
+        for keyword, ch in TOPIC_CHAPTER_MAP.items():
+            if keyword in topic:
+                chapter = ch
+                break
+        if not chapter:
+            chapter = topic  # fallback
+
+        current = chapter_status.get(chapter, "not_started")
+        if status == "completed" or current == "completed":
+            chapter_status[chapter] = "completed"
+        elif status == "in_progress":
+            chapter_status[chapter] = "in_progress"
+        elif current == "not_started":
+            chapter_status[chapter] = "not_started"
+    return chapter_status

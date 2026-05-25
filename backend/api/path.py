@@ -46,10 +46,12 @@ async def get_personalized_path(user_id: str):
         return _default_path("画像未建立，显示默认路径")
 
     try:
-        # 注入评估数据增强画像
-        from backend.db.models import get_latest_assessment
+        # 注入评估数据 + 学习进度增强画像
+        from backend.db.models import get_latest_assessment, get_chapter_progress
         assessment = get_latest_assessment(user_id)
+        chapter_progress = get_chapter_progress(user_id)
         enriched_profile = dict(profile)
+        enriched_profile["_chapter_progress"] = chapter_progress
         if assessment:
             suggestions_str = assessment.get("suggestions", "")
             if isinstance(suggestions_str, str):
