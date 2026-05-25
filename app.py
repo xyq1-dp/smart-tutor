@@ -375,19 +375,14 @@ with st.sidebar:
     # ---- 学习路径导航 ----
     st.subheader("🗺️ 学习路径")
 
-    chapters = [
-        ("01", "Python 基础语法", "pending"),
-        ("02", "流程控制", "pending"),
-        ("03", "函数与模块", "pending"),
-        ("04", "数据结构", "pending"),
-        ("05", "面向对象编程", "pending"),
-        ("06", "综合项目实战", "pending"),
-    ]
+    path_is_personalized = False
+    chapters = []
     if backend_ok:
         try:
-            path_resp = requests.get(f"{BACKEND_URL}/api/path/default", timeout=5)
+            path_resp = requests.get(f"{BACKEND_URL}/api/path/{user_id}", timeout=10)
             if path_resp.status_code == 200:
                 path_data = path_resp.json()
+                path_is_personalized = path_data.get("personalized", False)
                 chapters = [
                     (f"0{s['order']}", s["title"],
                      "current" if s["order"] == 1 else "pending")
@@ -395,6 +390,22 @@ with st.sidebar:
                 ]
         except (requests.ConnectionError, requests.Timeout):
             pass
+
+    if path_is_personalized:
+        st.markdown(
+            '<span style="font-size:0.72rem;color:#4caf50;">✨ 已根据画像定制</span>',
+            unsafe_allow_html=True,
+        )
+
+    if not chapters:
+        chapters = [
+            ("01", "Python 基础语法", "pending"),
+            ("02", "流程控制", "pending"),
+            ("03", "函数与模块", "pending"),
+            ("04", "数据结构", "pending"),
+            ("05", "面向对象编程", "pending"),
+            ("06", "综合项目实战", "pending"),
+        ]
 
     for num, title, status in chapters:
         dot_class = {"done": "done", "current": "current", "pending": "pending"}
@@ -681,56 +692,121 @@ with tab_resources:
 with tab_path:
     st.markdown("### 🗺️ 你的个性化学习路径")
 
+    # 加载路径状态
+    if "path_data" not in st.session_state:
+        st.session_state.path_data = None
+
     if backend_ok:
-        try:
-            resp = requests.get(f"{BACKEND_URL}/api/path/default", timeout=5)
-            if resp.status_code == 200:
-                path_data = resp.json()
-                stages = path_data.get("stages", [])
+        # "重新规划"按钮
+        col1, col2 = st.columns([3, 1])
+        with col2:
+            regenerate = st.button("🔄 重新规划", use_container_width=True,
+                                    disabled=not has_real_profile)
 
-                # 顶部总览
-                completed = 0
-                total = len(stages)
-                pct = int(completed / total * 100) if total > 0 else 0
-
-                st.markdown(
-                    f'<div class="progress-ring">'
-                    f'<span class="big-num">{pct}%</span>'
-                    f'<span style="color:#666;font-size:0.85rem;">'
-                    f'已完成 {completed}/{total} 个阶段 · 剩余约 {sum(s.get("estimated_hours", 0) for s in stages)} 小时</span>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-
-                # 时间线展示
-                for i, stage in enumerate(stages):
-                    order = stage.get("order", i + 1)
-                    title = stage.get("title", "")
-                    topics = stage.get("topics", [])
-                    hours = stage.get("estimated_hours", 0)
-
-                    if order == 1:
-                        circle = "active"
-                        bar = ""
+        if regenerate:
+            with st.spinner("正在根据你的画像重新规划学习路径..."):
+                try:
+                    r = requests.post(
+                        f"{BACKEND_URL}/api/path/plan",
+                        json={"user_id": user_id},
+                        timeout=60,
+                    )
+                    if r.status_code == 200:
+                        st.session_state.path_data = r.json()
+                        st.rerun()
                     else:
-                        circle = ""
-                        bar = ""
+                        st.error(f"规划失败：{r.json().get('detail', '未知错误')}")
+                except Exception as e:
+                    st.error(f"请求失败：{str(e)}")
 
-                    st.markdown(f"""
-                    <div class="timeline-stage">
-                        <div class="timeline-line">
-                            <div class="timeline-circle {circle}"></div>
-                            <div class="timeline-bar {bar}"></div>
-                        </div>
-                        <div class="timeline-body">
-                            <h4>阶段 {order}：{title}</h4>
-                            <div class="topics">{' · '.join(topics)}</div>
-                            <div class="hours">⏱ 预计 {hours} 小时</div>
-                        </div>
+        # 加载路径数据
+        if st.session_state.path_data is None:
+            try:
+                resp = requests.get(f"{BACKEND_URL}/api/path/{user_id}", timeout=10)
+                if resp.status_code == 200:
+                    st.session_state.path_data = resp.json()
+            except (requests.ConnectionError, requests.Timeout):
+                pass
+
+        path_data = st.session_state.path_data
+        if path_data:
+            stages = path_data.get("stages", [])
+            is_personalized = path_data.get("personalized", False)
+            starting_point = path_data.get("starting_point", "")
+            total_hours = path_data.get("total_estimated_hours", 42)
+            weekly_plan = path_data.get("weekly_plan", "")
+
+            with col1:
+                if is_personalized:
+                    st.markdown(
+                        f'<span style="font-size:0.9rem;color:#4caf50;">'
+                        f'✨ 已根据你的画像定制 · 建议从 <strong>{starting_point}</strong> 开始</span>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        f'<span style="font-size:0.85rem;color:#888;">'
+                        f'使用默认路径 · 在聊天中建立画像后可个性化定制</span>',
+                        unsafe_allow_html=True,
+                    )
+
+            # 顶部总览
+            completed = 0
+            total = len(stages)
+            pct = int(completed / total * 100) if total > 0 else 0
+
+            st.markdown(
+                f'<div class="progress-ring">'
+                f'<span class="big-num">{pct}%</span>'
+                f'<span style="color:#666;font-size:0.85rem;">'
+                f'共 {total} 个阶段 · 预计 {total_hours} 小时</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+            # 每周计划
+            if weekly_plan:
+                st.caption(f"📅 {weekly_plan}")
+
+            # 时间线展示
+            PRIORITY_COLORS = {"high": "#e53935", "medium": "#fb8c00", "low": "#43a047"}
+            for i, stage in enumerate(stages):
+                order = stage.get("order", i + 1)
+                title = stage.get("title", "")
+                topics = stage.get("topics", [])
+                hours = stage.get("estimated_hours", 0)
+                priority = stage.get("priority", "medium")
+                tips = stage.get("tips", "")
+
+                if order == 1:
+                    circle = "active"
+                    bar = ""
+                else:
+                    circle = ""
+                    bar = ""
+
+                priority_color = PRIORITY_COLORS.get(priority, "#888")
+
+                st.markdown(f"""
+                <div class="timeline-stage">
+                    <div class="timeline-line">
+                        <div class="timeline-circle {circle}"></div>
+                        <div class="timeline-bar {bar}"></div>
                     </div>
-                    """, unsafe_allow_html=True)
+                    <div class="timeline-body">
+                        <h4>
+                            阶段 {order}：{title}
+                            <span style="font-size:0.72rem;color:{priority_color};margin-left:0.5rem;">
+                                {'🔴 重点' if priority == 'high' else '🟠 中等' if priority == 'medium' else '🟢 了解'}
+                            </span>
+                        </h4>
+                        <div class="topics">{' · '.join(topics)}</div>
+                        <div class="hours">⏱ 预计 {hours} 小时{f' · 💡 {tips}' if tips else ''}</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
 
-        except requests.ConnectionError:
-            st.warning("⚠️ 后端未连接，无法加载学习路径。")
+        else:
+            st.warning("请启动后端服务查看学习路径。")
     else:
         st.warning("请启动后端服务查看学习路径。")
