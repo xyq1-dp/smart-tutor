@@ -33,8 +33,28 @@ app.include_router(assessment_router, prefix="/api")
 @app.on_event("startup")
 async def startup():
     init_db()
+    # 自动索引知识库（增量，跳过已索引的）
+    from backend.db.vector_store import auto_index_knowledge_base
+    try:
+        auto_index_knowledge_base()
+    except Exception:
+        pass  # 索失败不影响启动
 
 
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "service": "smart-tutor"}
+
+
+@app.get("/api/kb/stats")
+async def kb_stats():
+    """知识库索引状态"""
+    from backend.db.vector_store import get_kb_stats
+    return get_kb_stats()
+
+
+@app.post("/api/kb/reindex")
+async def kb_reindex():
+    """强制重新索引知识库"""
+    from backend.db.vector_store import reindex_knowledge_base
+    return reindex_knowledge_base()
