@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.api.chat import router as chat_router
 from backend.api.resource import router as resource_router
 from backend.api.path import router as path_router
+from backend.api.assessment import router as assessment_router
 from backend.db.models import init_db
 
 app = FastAPI(
@@ -26,6 +27,7 @@ app.add_middleware(
 app.include_router(chat_router, prefix="/api")
 app.include_router(resource_router, prefix="/api")
 app.include_router(path_router, prefix="/api")
+app.include_router(assessment_router, prefix="/api")
 
 
 @app.on_event("startup")

@@ -66,6 +66,17 @@ async def generate_resource(req: ResourceRequest):
         except Exception as e:
             result = {"topic": req.topic, "resources": {}, "errors": [str(e)]}
 
+        # 记录学习行为
+        try:
+            from backend.db.models import record_behavior
+            record_behavior(req.user_id, "resource_generate", {
+                "topic": req.topic,
+                "types": requested,
+                "success_count": len(result.get("resources", {})),
+            })
+        except Exception:
+            pass
+
         yield f"data: {json.dumps({'stage': 'result', 'data': result}, ensure_ascii=False)}\n\n"
         yield f"data: {json.dumps({'done': True})}\n\n"
 

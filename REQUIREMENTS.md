@@ -70,13 +70,17 @@
 
 ---
 
-### F5. 学习效果评估（可选加分项）⏳ 未开始
+### F5. 学习效果评估（可选加分项）✅ 已完成
 
 | 子要求 | 状态 | 实现位置 | 备注 |
 |--------|------|----------|------|
-| 跟踪学习行为/练习/资源使用 | 🚧 表已建 | `backend/db/models.py` | `learning_progress` 表已建，未写入数据 |
-| 大模型多维度评估 | ⏳ 未开始 | — | 第 5 周 |
-| 根据评估动态调整推送和学习计划 | ⏳ 未开始 | — | 第 5 周 |
+| 跟踪学习行为/练习/资源使用 | ✅ 已实现 | `backend/db/models.py` | `learning_behaviors` 表 + `record_behavior()` 记录聊天/资源生成/路径查看 |
+| 行为埋点自动收集 | ✅ 已实现 | `backend/api/chat.py`, `resource.py`, `path.py` | 各 API 自动记录行为（chat/tutor_question/resource_generate/path_view/path_plan） |
+| 大模型多维度评估 | ✅ 已实现 | `backend/agents/evaluation_agent.py` | 3 维度（知识掌握/学习投入/学习进度）+ 综合分 + 学习建议 |
+| 评估持久化存储 | ✅ 已实现 | `backend/db/models.py` | `assessment_records` 表，支持历史查询 |
+| 评估 API | ✅ 已实现 | `backend/api/assessment.py` | `POST /assessment/evaluate` 触发评估，`GET /assessment/{user_id}` 获取结果 |
+| 根据评估动态调整推送和学习计划 | ✅ 已实现 | `backend/api/path.py` | 路径规划自动注入评估数据（薄弱点/专注主题/知识掌握分） |
+| 前端评估面板 | ✅ 已实现 | `app.py` 侧边栏 + 路径 Tab | 综合分 + 三维度进度条 + 摘要 + 触发重新评估按钮 |
 
 ---
 

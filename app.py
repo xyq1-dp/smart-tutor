@@ -418,6 +418,107 @@ with st.sidebar:
 
     st.divider()
 
+    # ---- 学习评估 ----
+    st.subheader("📊 学习评估")
+
+    # 加载评估数据
+    assessment_data = None
+    if backend_ok and has_real_profile:
+        try:
+            assess_resp = requests.get(
+                f"{BACKEND_URL}/api/assessment/{user_id}", timeout=10
+            )
+            if assess_resp.status_code == 200:
+                assess_json = assess_resp.json()
+                if assess_json.get("has_assessment"):
+                    assessment_data = assess_json["assessment"]
+        except (requests.ConnectionError, requests.Timeout):
+            pass
+
+    if assessment_data:
+        overall = assessment_data.get("overall_score", 0)
+        st.markdown(
+            f'<div class="progress-ring">'
+            f'<span class="big-num">{overall}</span>'
+            f'<span style="color:#666;font-size:0.8rem;">综合评分 / 100</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+        # 三维度简版
+        dims = assessment_data.get("dimensions", {})
+        if isinstance(dims, str):
+            try:
+                dims = json.loads(dims)
+            except (json.JSONDecodeError, ValueError):
+                dims = {}
+        dim_labels = [
+            ("knowledge_mastery", "知识掌握", "📖"),
+            ("engagement", "学习投入", "🔥"),
+            ("progress", "学习进度", "📈"),
+        ]
+        for key, label, icon in dim_labels:
+            d = dims.get(key, {})
+            if isinstance(d, dict):
+                score = d.get("score", 0)
+            else:
+                score = 0
+            bar_color = "#4caf50" if score >= 70 else "#fb8c00" if score >= 40 else "#f44336"
+            st.markdown(
+                f'<div style="display:flex;align-items:center;gap:0.5rem;'
+                f'padding:0.2rem 0;font-size:0.8rem;">'
+                f'<span>{icon}</span><span style="width:3.5rem;">{label}</span>'
+                f'<span style="flex:1;background:#eee;border-radius:4px;height:6px;">'
+                f'<span style="display:block;width:{score}%;background:{bar_color};'
+                f'height:6px;border-radius:4px;"></span></span>'
+                f'<span style="width:2rem;text-align:right;">{score}</span>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        st.caption(assessment_data.get("summary", "")[:80] + "...")
+
+        # 触发新评估按钮
+        if st.button("🔄 重新评估", use_container_width=True, key="sidebar_reeval"):
+            with st.spinner("评估中..."):
+                try:
+                    r = requests.post(
+                        f"{BACKEND_URL}/api/assessment/evaluate",
+                        json={"user_id": user_id},
+                        timeout=120,
+                    )
+                    if r.status_code == 200:
+                        st.rerun()
+                    else:
+                        st.error(r.json().get("detail", "评估失败"))
+                except Exception as e:
+                    st.error(f"请求失败: {str(e)}")
+    else:
+        if has_real_profile:
+            st.markdown(
+                '<span style="font-size:0.78rem;color:#999;">尚未评估，点击下方按钮开始</span>',
+                unsafe_allow_html=True,
+            )
+            if st.button("📊 开始评估", use_container_width=True, key="sidebar_eval"):
+                with st.spinner("正在分析学习数据..."):
+                    try:
+                        r = requests.post(
+                            f"{BACKEND_URL}/api/assessment/evaluate",
+                            json={"user_id": user_id},
+                            timeout=120,
+                        )
+                        if r.status_code == 200:
+                            st.rerun()
+                        else:
+                            st.error(r.json().get("detail", "评估失败"))
+                    except Exception as e:
+                        st.error(f"请求失败: {str(e)}")
+        else:
+            st.markdown(
+                '<span style="font-size:0.78rem;color:#ccc;">先建立画像后可评估</span>',
+                unsafe_allow_html=True,
+            )
+
+    st.divider()
+
     # ---- 学习路径导航 ----
     st.subheader("🗺️ 学习路径")
 
@@ -781,6 +882,19 @@ with tab_path:
             starting_point = path_data.get("starting_point", "")
             total_hours = path_data.get("total_estimated_hours", 42)
             weekly_plan = path_data.get("weekly_plan", "")
+
+            # 显示评估摘要（如有）
+            assess_summary = path_data.get("assessment_summary")
+            if assess_summary:
+                score = assess_summary.get("overall_score", 0)
+                st.markdown(
+                    f'<div style="background:linear-gradient(135deg,#e8f5e9,#f1f8e9);'
+                    f'border-radius:0.6rem;padding:0.8rem 1rem;margin-bottom:0.8rem;">'
+                    f'<span style="font-weight:600;">📊 最新评估综合分：{score}/100</span>'
+                    f'<span style="font-size:0.78rem;color:#666;margin-left:0.5rem;">'
+                    f'{assess_summary.get("summary", "")[:60]}...</span></div>',
+                    unsafe_allow_html=True,
+                )
 
             with col1:
                 if is_personalized:

@@ -1,5 +1,6 @@
 """学习路径规划接口 — 个性化路径生成"""
 
+import json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -28,22 +29,53 @@ async def get_default_path():
 @router.get("/path/{user_id}")
 async def get_personalized_path(user_id: str):
     """根据学生画像返回个性化学习路径"""
-    from backend.db.models import ensure_user, get_profile
+    from backend.db.models import ensure_user, get_profile, record_behavior
     from backend.agents.path_agent import plan_learning_path
 
     ensure_user(user_id)
     profile = get_profile(user_id)
+
+    # 记录路径查看行为
+    try:
+        record_behavior(user_id, "path_view", {"source": "get_path"})
+    except Exception:
+        pass
 
     has_profile = profile and bool(profile.get("learning_goal"))
     if not has_profile:
         return _default_path("画像未建立，显示默认路径")
 
     try:
-        result = await plan_learning_path(dict(profile))
+        # 注入评估数据增强画像
+        from backend.db.models import get_latest_assessment
+        assessment = get_latest_assessment(user_id)
+        enriched_profile = dict(profile)
+        if assessment:
+            suggestions_str = assessment.get("suggestions", "")
+            if isinstance(suggestions_str, str):
+                try:
+                    suggestions = json.loads(suggestions_str)
+                except (json.JSONDecodeError, ValueError):
+                    suggestions = {}
+            else:
+                suggestions = suggestions_str or {}
+
+            dims = assessment.get("dimensions", {})
+            if isinstance(dims, str):
+                try:
+                    dims = json.loads(dims)
+                except (json.JSONDecodeError, ValueError):
+                    dims = {}
+
+            enriched_profile["_assessment_score"] = assessment.get("overall_score", 0)
+            enriched_profile["_focus_topics"] = suggestions.get("focus_topics", [])
+            enriched_profile["_knowledge_mastery"] = dims.get("knowledge_mastery", {}).get("score", 0)
+
+        result = await plan_learning_path(enriched_profile)
         if "error" in result:
             return _default_path(result.get("error", ""))
 
-        return {
+        response = {
             "course": "Python 程序设计基础",
             "personalized": True,
             "starting_point": result.get("starting_point", ""),
@@ -51,6 +83,13 @@ async def get_personalized_path(user_id: str):
             "weekly_plan": result.get("weekly_plan", ""),
             "stages": _normalize_stages(result.get("path", [])),
         }
+        if assessment:
+            response["assessment_summary"] = {
+                "overall_score": assessment.get("overall_score"),
+                "summary": assessment.get("summary", ""),
+                "evaluated_at": assessment.get("created_at", ""),
+            }
+        return response
     except Exception as e:
         return _default_path(f"路径规划失败: {str(e)}")
 
@@ -64,15 +103,46 @@ async def regenerate_path(req: PathRequest):
     ensure_user(req.user_id)
     profile = get_profile(req.user_id)
 
+    # 记录路径规划行为
+    try:
+        from backend.db.models import record_behavior
+        record_behavior(req.user_id, "path_plan", {"source": "regenerate"})
+    except Exception:
+        pass
+
     if not profile or not profile.get("learning_goal"):
         raise HTTPException(status_code=400, detail="请先在聊天中建立学习画像")
 
     try:
-        result = await plan_learning_path(dict(profile))
+        from backend.db.models import get_latest_assessment
+        assessment = get_latest_assessment(req.user_id)
+        enriched_profile = dict(profile)
+        if assessment:
+            suggestions_str = assessment.get("suggestions", "")
+            if isinstance(suggestions_str, str):
+                try:
+                    suggestions = json.loads(suggestions_str)
+                except (json.JSONDecodeError, ValueError):
+                    suggestions = {}
+            else:
+                suggestions = suggestions_str or {}
+
+            dims = assessment.get("dimensions", {})
+            if isinstance(dims, str):
+                try:
+                    dims = json.loads(dims)
+                except (json.JSONDecodeError, ValueError):
+                    dims = {}
+
+            enriched_profile["_assessment_score"] = assessment.get("overall_score", 0)
+            enriched_profile["_focus_topics"] = suggestions.get("focus_topics", [])
+            enriched_profile["_knowledge_mastery"] = dims.get("knowledge_mastery", {}).get("score", 0)
+
+        result = await plan_learning_path(enriched_profile)
         if "error" in result:
             raise HTTPException(status_code=500, detail=result["error"])
 
-        return {
+        response = {
             "course": "Python 程序设计基础",
             "personalized": True,
             "starting_point": result.get("starting_point", ""),
@@ -80,6 +150,13 @@ async def regenerate_path(req: PathRequest):
             "weekly_plan": result.get("weekly_plan", ""),
             "stages": _normalize_stages(result.get("path", [])),
         }
+        if assessment:
+            response["assessment_summary"] = {
+                "overall_score": assessment.get("overall_score"),
+                "summary": assessment.get("summary", ""),
+                "evaluated_at": assessment.get("created_at", ""),
+            }
+        return response
     except HTTPException:
         raise
     except Exception as e:

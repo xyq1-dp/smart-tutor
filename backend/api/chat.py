@@ -67,6 +67,24 @@ async def chat(req: ChatRequest):
         except Exception:
             pass
 
+        # 记录学习行为
+        try:
+            from backend.db.models import record_behavior
+            btype = "tutor_question" if is_tutor_mode else "chat"
+            topic_keywords = []
+            for kw in ["列表", "字典", "函数", "类", "循环", "条件", "异常",
+                        "文件", "模块", "面向对象", "推导", "装饰器", "字符串"]:
+                if kw in req.message:
+                    topic_keywords.append(kw)
+            record_behavior(req.user_id, btype, {
+                "question": req.message[:200],
+                "tutor_mode": is_tutor_mode,
+                "topics": topic_keywords,
+                "response_len": len(full_response),
+            })
+        except Exception:
+            pass
+
         # 从对话中提取画像并更新数据库
         try:
             all_history = req.history + [
