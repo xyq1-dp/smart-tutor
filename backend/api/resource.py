@@ -5,6 +5,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from backend.utils.safety import check_content
 
 router = APIRouter()
 
@@ -20,6 +21,11 @@ async def generate_resource(req: ResourceRequest):
     """多智能体协同生成个性化学习资源（SSE 流式返回进度）"""
     if not req.topic.strip():
         raise HTTPException(status_code=400, detail="知识点主题不能为空")
+
+    # 内容安全检查
+    is_safe, reason = check_content(req.topic)
+    if not is_safe:
+        raise HTTPException(status_code=422, detail=f"主题包含不当内容：{reason}")
 
     valid_types = {"doc", "mindmap", "exercise", "reading", "practice"}
     if req.resource_types:

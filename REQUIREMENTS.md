@@ -109,6 +109,7 @@
 |--------|------|----------|------|
 | 生成内容无事实性错误 | ✅ 已实现 | `backend/utils/anti_hallucination.py` | LLM 自检 + 知识库比对 + Python AST 语法校验 |
 | 无敏感违规信息 | ✅ 已实现 | `backend/utils/safety.py` | 敏感词过滤 + Prompt Injection 检测 |
+| 安全模块已接入主流程 | ✅ 已实现 | `backend/api/chat.py`, `resource.py` | 用户输入安全检查 + 生成内容引用声明 |
 
 ### NF4. 响应性能
 

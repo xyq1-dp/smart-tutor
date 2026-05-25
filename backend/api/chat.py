@@ -8,6 +8,8 @@ from backend.llm.spark import spark_chat_stream
 from backend.db.models import ensure_user, get_profile, save_message, update_profile
 from backend.agents.profile_agent import extract_profile_from_chat
 from backend.agents.tutor_agent import _is_tutor_question, build_tutor_prompt
+from backend.utils.safety import check_content
+from backend.utils.anti_hallucination import add_citations
 
 router = APIRouter()
 
@@ -32,6 +34,11 @@ async def chat(req: ChatRequest):
     """对话接口 - 流式返回 + 画像自动更新"""
     if not req.message.strip():
         raise HTTPException(status_code=400, detail="消息不能为空")
+
+    # 内容安全检查
+    is_safe, reason = check_content(req.message)
+    if not is_safe:
+        raise HTTPException(status_code=422, detail=f"消息包含不当内容：{reason}")
 
     ensure_user(req.user_id)
     profile = get_profile(req.user_id)
@@ -59,6 +66,12 @@ async def chat(req: ChatRequest):
                 return
             full_response += chunk
             yield f"data: {json.dumps({'content': chunk})}\n\n"
+
+        # 为辅导/教学类回复添加来源声明
+        if is_tutor_mode and full_response and "错误" not in full_response[:10]:
+            citation = add_citations("")  # 只取引用声明部分
+            full_response += citation
+            yield f"data: {json.dumps({'content': citation})}\n\n"
 
         # 保存对话记录
         try:

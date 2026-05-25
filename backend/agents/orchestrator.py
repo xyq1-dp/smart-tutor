@@ -52,6 +52,7 @@ async def run_resource_orchestrator(
     from backend.db.models import get_profile, ensure_user
     from backend.db.vector_store import search_knowledge
     from backend.agents.resource_agent import generate_resource
+    from backend.utils.anti_hallucination import add_citations
 
     ensure_user(user_id)
     profile = get_profile(user_id) or {}
@@ -98,6 +99,8 @@ async def run_resource_orchestrator(
 
         try:
             content = await generate_resource(rtype, topic, profile)
+            if rtype in ("doc", "reading"):
+                content = add_citations(content)
             results[rtype] = content
             if progress_callback:
                 await progress_callback("agent_done", {
