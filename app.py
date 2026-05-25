@@ -664,13 +664,28 @@ with tab_chat:
 
                         placeholder.markdown(full_response)
 
-                        # 辅导模式提示
+                        # 辅导模式提示 + 资源联动入口
                         if is_tutor:
                             st.markdown(
                                 '<div class="extract-hint" style="border-color:#667eea;background:#f5f7ff;">'
                                 '🧑‍🏫 <strong>辅导模式</strong> · 已根据你的画像生成结构化答疑</div>',
                                 unsafe_allow_html=True,
                             )
+                            # 检测知识点，提供资源直达入口
+                            detected_topic = None
+                            for kw in ["列表推导", "列表", "字典推导", "字典", "集合", "元组",
+                                        "函数", "lambda", "装饰器", "类", "继承", "多态",
+                                        "异常处理", "异常", "文件操作", "文件", "模块",
+                                        "循环", "条件判断", "字符串", "面向对象"]:
+                                if kw in prompt:
+                                    detected_topic = kw
+                                    break
+                            if not detected_topic:
+                                detected_topic = prompt[:20]
+                            if st.button(f"📚 为「{detected_topic}」生成学习资料",
+                                         key=f"resource_cta_{len(st.session_state.messages)}"):
+                                st.session_state.pending_resource_topic = detected_topic
+                                st.info(f"已选择「{detected_topic}」，切换到 📚 学习资源 Tab 即可自动填充")
 
                         # 画像提取提示
                         if not has_real_profile:
@@ -716,6 +731,11 @@ with tab_resources:
     }
 
     # ---- 资源生成操作区 ----
+    # 检查是否有从聊天联动过来的待处理主题
+    pending_topic = st.session_state.pop("pending_resource_topic", None)
+    if pending_topic:
+        st.session_state.resource_topic = pending_topic
+
     col_topic, col_btn = st.columns([3, 1])
     with col_topic:
         topic = st.text_input(
