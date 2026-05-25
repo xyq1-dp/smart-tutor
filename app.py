@@ -437,13 +437,17 @@ with st.sidebar:
 
     if assessment_data:
         overall = assessment_data.get("overall_score", 0)
+        assess_type = assessment_data.get("assessment_type", "")
+        type_label = "初始评估" if assess_type == "initial" else "综合评分"
         st.markdown(
             f'<div class="progress-ring">'
             f'<span class="big-num">{overall}</span>'
-            f'<span style="color:#666;font-size:0.8rem;">综合评分 / 100</span>'
+            f'<span style="color:#666;font-size:0.8rem;">{type_label} / 100</span>'
             f'</div>',
             unsafe_allow_html=True,
         )
+        if assess_type == "initial":
+            st.caption("⚡ 基于有限数据的初始评估，随学习深入会更准确")
         # 三维度简版
         dims = assessment_data.get("dimensions", {})
         if isinstance(dims, str):

@@ -62,6 +62,33 @@ EVALUATION_PROMPT = """你是一位教育评估专家。请根据以下数据对
 要求：评估客观准确，建议具体可执行。用中文。"""
 
 
+COLD_START_PROMPT = """你是一位教育评估专家。这位学生刚开始使用学习系统，数据有限。
+
+## 学生画像
+{profile_text}
+
+## 早期行为信号
+- 总行为次数：{total_behaviors}
+- 行为类型分布：{type_counts}
+- 接触过的知识点：{topics_touched}
+
+## 早期对话片段
+{chat_summary}
+
+这是学生的首次评估。请不要打过高或过低的分数——数据不足以做精确判断。
+请根据画像信息给出一个保守的起点评估，重点放在基于画像的**学习建议**上，
+而非对掌握度的精确判断。
+
+返回 JSON 格式同上，但注意：
+- overall_score 控制在 30-50 之间（初始基准线）
+- knowledge_mastery.score 基于画像中的 knowledge_level 推算（beginner→30, medium→50, advanced→65）
+- engagement.score 基于已有行为次数估算（<5次→20, 5-10次→35, >10次→50）
+- summary 中说明"这是基于有限数据的初始评估，随着学习深入会更准确"
+- suggestions 要具体、可执行，聚焦在"如何开始有效学习"
+
+用中文。"""
+
+
 async def evaluate_learning(user_id: str) -> dict:
     """
     多维度学习效果评估
@@ -118,21 +145,40 @@ async def evaluate_learning(user_id: str) -> dict:
             "created_at": last_assessment.get("created_at", ""),
         }, ensure_ascii=False)
 
-    prompt = EVALUATION_PROMPT.format(
-        profile_text=profile_text,
-        total_behaviors=summary.get("total_behaviors", 0),
-        type_counts=json.dumps(summary.get("type_counts", {}), ensure_ascii=False),
-        last_active=summary.get("last_active", "未知"),
-        topics_touched=", ".join(summary.get("topics_touched", [])) or "暂无",
-        chat_summary=chat_summary or "暂无对话记录",
-        path_progress=path_progress,
-        last_assessment=last_assessment_text,
-    )
+    total_behaviors = summary.get("total_behaviors", 0)
+    is_cold_start = total_behaviors < 10 and not last_assessment
+
+    if is_cold_start:
+        prompt = COLD_START_PROMPT.format(
+            profile_text=profile_text,
+            total_behaviors=total_behaviors,
+            type_counts=json.dumps(summary.get("type_counts", {}), ensure_ascii=False),
+            topics_touched=", ".join(summary.get("topics_touched", [])) or "暂无",
+            chat_summary=chat_summary or "暂无对话记录",
+        )
+    else:
+        prompt = EVALUATION_PROMPT.format(
+            profile_text=profile_text,
+            total_behaviors=total_behaviors,
+            type_counts=json.dumps(summary.get("type_counts", {}), ensure_ascii=False),
+            last_active=summary.get("last_active", "未知"),
+            topics_touched=", ".join(summary.get("topics_touched", [])) or "暂无",
+            chat_summary=chat_summary or "暂无对话记录",
+            path_progress=path_progress,
+            last_assessment=last_assessment_text,
+        )
 
     result = await spark_chat(
         [{"role": "user", "content": prompt}],
         temperature=0.3,
     )
+
+    # 冷启动标注
+    if is_cold_start:
+        result_copy = _parse_result(result)
+        result_copy["assessment_type"] = "initial"
+        result_copy["data_sufficiency"] = "low"
+        return result_copy
 
     return _parse_result(result)
 
