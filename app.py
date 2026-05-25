@@ -26,22 +26,22 @@ MERMAID_TPL = """<!DOCTYPE html>
 
 
 def _render_markdown(content: str):
-    """渲染 Markdown，自动处理 Mermaid 图表"""
+    """渲染 Markdown，自动处理 Mermaid 图表和 Python 代码运行按钮"""
     # 查找 mermaid 代码块
     pattern = r'```mermaid\s*\n(.*?)```'
     mermaid_blocks = list(re.finditer(pattern, content, re.DOTALL))
 
     if not mermaid_blocks:
-        st.markdown(content)
+        _render_content_with_run_buttons(content)
         return
 
     # 拆分渲染
     last_end = 0
     for match in mermaid_blocks:
-        # 渲染前面的普通 markdown
+        # 渲染前面的普通 markdown（含 Python 运行按钮）
         before = content[last_end:match.start()].strip()
         if before:
-            st.markdown(before)
+            _render_content_with_run_buttons(before)
 
         # 渲染 Mermaid 图
         mermaid_code = match.group(1).strip()
@@ -51,6 +51,60 @@ def _render_markdown(content: str):
             components.html(html, height=300, scrolling=True)
         except Exception:
             st.code(mermaid_code, language="mermaid")
+
+        last_end = match.end()
+
+    # 渲染剩余内容
+    after = content[last_end:].strip()
+    if after:
+        _render_content_with_run_buttons(after)
+
+
+def _render_content_with_run_buttons(content: str):
+    """渲染 Markdown 内容，为 Python 代码块添加运行按钮"""
+    py_pattern = r'```python\s*\n(.*?)```'
+    py_blocks = list(re.finditer(py_pattern, content, re.DOTALL))
+
+    if not py_blocks:
+        st.markdown(content)
+        return
+
+    last_end = 0
+    for i, match in enumerate(py_blocks):
+        # 渲染前面的普通 markdown
+        before = content[last_end:match.start()].strip()
+        if before:
+            st.markdown(before)
+
+        # 渲染 Python 代码 + 运行按钮
+        py_code = match.group(1).strip()
+        st.code(py_code, language="python")
+
+        btn_key = f"run_{hash(py_code)}_{i}"
+        if st.button("▶️ 运行代码", key=btn_key, use_container_width=False):
+            with st.spinner("执行中..."):
+                try:
+                    resp = requests.post(
+                        f"{BACKEND_URL}/api/execute",
+                        json={"code": py_code},
+                        timeout=10,
+                    )
+                    if resp.status_code == 200:
+                        result = resp.json()
+                        if result.get("success"):
+                            st.success("✅ 执行成功")
+                            if result.get("output"):
+                                st.code(result["output"], language="text")
+                        else:
+                            st.error(result.get("error", "执行失败"))
+                            if result.get("output"):
+                                st.code(result["output"], language="text")
+                    else:
+                        st.error(f"后端错误: {resp.status_code}")
+                except requests.ConnectionError:
+                    st.error("后端未连接")
+                except Exception as e:
+                    st.error(f"执行失败: {str(e)}")
 
         last_end = match.end()
 
