@@ -80,6 +80,14 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id)
         );
 
+        CREATE TABLE IF NOT EXISTS profile_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            snapshot TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        );
+
         CREATE TABLE IF NOT EXISTS assessment_records (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id TEXT NOT NULL,
@@ -127,8 +135,84 @@ def get_profile(user_id: str) -> dict | None:
     return dict(row) if row else None
 
 
+def save_profile_snapshot(user_id: str) -> None:
+    """将当前画像存档为快照（在更新前调用）"""
+    current = get_profile(user_id)
+    if not current:
+        return
+    # 只存档有值的维度
+    snapshot = {k: v for k, v in current.items()
+                if v and v != "[]" and k != "user_id" and k != "updated_at"}
+    if not snapshot:
+        return
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO profile_snapshots (user_id, snapshot) VALUES (?, ?)",
+        (user_id, json.dumps(snapshot, ensure_ascii=False)),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_profile_snapshots(user_id: str, limit: int = 10) -> list[dict]:
+    """获取画像快照历史"""
+    conn = get_db()
+    cur = conn.execute(
+        "SELECT * FROM profile_snapshots WHERE user_id = ? "
+        "ORDER BY id DESC LIMIT ?",
+        (user_id, limit),
+    )
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_profile_long_term_memory(user_id: str) -> str:
+    """从历史快照中提取长期关键信息（供 profile_agent 参考）"""
+    snapshots = get_profile_snapshots(user_id, limit=5)
+    if not snapshots:
+        return ""
+
+    # 汇总历史中的关键字段
+    all_goals = set()
+    all_interests = set()
+    all_weak = set()
+    for s in snapshots:
+        try:
+            snap = json.loads(s["snapshot"]) if isinstance(s["snapshot"], str) else s["snapshot"]
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if snap.get("learning_goal"):
+            all_goals.add(snap["learning_goal"])
+        interests = snap.get("interest_areas", [])
+        if isinstance(interests, str):
+            try:
+                interests = json.loads(interests)
+            except (json.JSONDecodeError, ValueError):
+                interests = []
+        for item in interests:
+            all_interests.add(item)
+        weak = snap.get("weak_points", [])
+        if isinstance(weak, str):
+            try:
+                weak = json.loads(weak)
+            except (json.JSONDecodeError, ValueError):
+                weak = []
+        for item in weak:
+            all_weak.add(item)
+
+    parts = []
+    if all_goals:
+        parts.append(f"历史学习目标：{'、'.join(list(all_goals)[-3:])}")
+    if all_interests:
+        parts.append(f"持续关注方向：{'、'.join(list(all_interests)[-5:])}")
+    if all_weak:
+        parts.append(f"历史薄弱点：{'、'.join(list(all_weak)[-5:])}")
+    return "\n".join(parts)
+
+
 def update_profile(user_id: str, **fields) -> None:
-    """更新用户画像字段"""
+    """更新用户画像字段（自动存档旧画像）"""
     allowed = {
         "knowledge_level", "learning_goal", "cognitive_style",
         "pace", "weak_points", "interest_areas", "extra_info",
@@ -136,6 +220,9 @@ def update_profile(user_id: str, **fields) -> None:
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return
+
+    # 更新前存档
+    save_profile_snapshot(user_id)
 
     set_clause = ", ".join(f"{k} = ?" for k in updates)
     values = list(updates.values()) + [user_id]

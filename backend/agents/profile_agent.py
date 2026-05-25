@@ -28,6 +28,9 @@ PROFILE_EXTRACTION_PROMPT = """你是一个学生画像分析专家。根据以�
 }}
 
 只提取对话中明确体现的信息，未知的维度用 null。
+
+{long_term_memory}
+
 对话：
 {conversation}
 """
@@ -53,7 +56,15 @@ async def extract_profile_from_chat(
         for msg in chat_history[-20:]  # 最近 20 轮
     )
 
-    prompt = PROFILE_EXTRACTION_PROMPT.format(conversation=conversation)
+    # 获取长期记忆
+    from backend.db.models import get_profile_long_term_memory
+    long_term = get_profile_long_term_memory(user_id)
+    memory_text = f"该学生的历史关键信息（请结合当前对话综合判断）：\n{long_term}" if long_term else ""
+
+    prompt = PROFILE_EXTRACTION_PROMPT.format(
+        conversation=conversation,
+        long_term_memory=memory_text,
+    )
 
     result = await spark_chat(
         [{"role": "user", "content": prompt}],
