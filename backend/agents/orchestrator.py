@@ -170,11 +170,15 @@ async def run_resource_orchestrator(
 
     graph = build_resource_graph()
 
-    # 流式执行各节点，通过 progress_callback 汇报进度
-    final_state = None
+    # 流式执行各节点，通过 progress_callback 汇报进度（只执行一次）
+    merged_state: dict = dict(initial_state)
     async for event in graph.astream(initial_state):
         node_name = list(event.keys())[0]
         node_output = event[node_name]
+        # 累积合并每个节点的输出到 merged_state
+        for key in ("profile", "kb_context", "doc_content", "generated", "errors"):
+            if key in node_output:
+                merged_state[key] = node_output[key]
 
         if progress_callback:
             if node_name == "load_context":
@@ -207,8 +211,8 @@ async def run_resource_orchestrator(
                     "message": "全部完成！",
                 })
 
-    # 获取最终状态
-    final_state = graph.invoke(initial_state)
+    # 使用合并后的状态（无需二次执行）
+    final_state = merged_state
 
     profile = final_state.get("profile", {})
     return {

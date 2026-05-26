@@ -7,7 +7,7 @@
 3. 置信度评估：对生成内容进行自检
 """
 
-from backend.llm.spark import spark_chat
+from backend.llm.deepseek import deepseek_chat
 
 
 async def verify_against_knowledge_base(
@@ -40,7 +40,7 @@ async def verify_against_knowledge_base(
   "corrected_version": "修正后的完整内容（如无误则留空）"
 }}
 """
-    result = await spark_chat(
+    result = await deepseek_chat(
         [{"role": "user", "content": check_prompt}],
         temperature=0.1,  # 低温度减少随机性
     )

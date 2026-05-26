@@ -86,7 +86,7 @@ def _render_content_with_run_buttons(content: str):
                 try:
                     resp = requests.post(
                         f"{BACKEND_URL}/api/execute",
-                        json={"code": py_code},
+                        json={"code": py_code, "user_id": user_id},
                         timeout=10,
                     )
                     if resp.status_code == 200:

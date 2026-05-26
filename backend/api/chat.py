@@ -4,7 +4,7 @@ import json
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from backend.llm.spark import spark_chat_stream
+from backend.llm.deepseek import deepseek_chat_stream
 from backend.db.models import ensure_user, get_profile, save_message, update_profile
 from backend.agents.profile_agent import extract_profile_from_chat
 from backend.agents.tutor_agent import _is_tutor_question, build_tutor_prompt
@@ -60,7 +60,7 @@ async def chat(req: ChatRequest):
 
     async def generate():
         full_response = ""
-        async for chunk in spark_chat_stream(messages):
+        async for chunk in deepseek_chat_stream(messages):
             if chunk.startswith("[错误"):
                 yield f"data: {json.dumps({'error': chunk})}\n\n"
                 return
@@ -80,9 +80,11 @@ async def chat(req: ChatRequest):
         except Exception:
             pass
 
-        # 记录学习行为 + 更新学习进度
+        # 记录学习行为 + 更新KC级知识状态
         try:
-            from backend.db.models import record_behavior, detect_topic_chapter, update_topic_progress
+            from backend.db.models import record_behavior
+            from backend.db.knowledge_tracing import infer_kc_from_text, update_kc_mastery
+
             btype = "tutor_question" if is_tutor_mode else "chat"
             topic_keywords = []
             for kw in ["列表", "字典", "函数", "类", "循环", "条件", "异常",
@@ -95,11 +97,12 @@ async def chat(req: ChatRequest):
                 "topics": topic_keywords,
                 "response_len": len(full_response),
             })
-            # 辅导模式自动标记知识点为学习中
+
+            # KC级进度更新：从消息中推断知识点并更新掌握度
             if is_tutor_mode:
-                chapter = detect_topic_chapter(req.message)
-                if chapter:
-                    update_topic_progress(req.user_id, chapter, "in_progress")
+                kcs = infer_kc_from_text(req.message)
+                for kc in kcs[:5]:
+                    update_kc_mastery(req.user_id, kc, quality_score=0.4)
         except Exception:
             pass
 
@@ -172,6 +175,21 @@ def _build_system_prompt(user_id: str) -> str:
                     parts.append(f"- {PROFILE_LABELS[field]}：{', '.join(items)}")
             except (json.JSONDecodeError, ValueError):
                 pass
+
+    # 注入知识状态摘要
+    try:
+        from backend.db.knowledge_tracing import (
+            get_chapter_mastery_text, get_next_review_recommendations,
+        )
+        mastery_text = get_chapter_mastery_text(user_id)
+        if mastery_text:
+            parts.append(f"\n各章节掌握度：\n{mastery_text}")
+        review_kcs = get_next_review_recommendations(user_id, top_n=3)
+        if review_kcs:
+            kc_names = [k["name"] for k in review_kcs]
+            parts.append(f"建议优先复习：{', '.join(kc_names)}")
+    except Exception:
+        pass
 
     profile_text = "\n".join(parts)
 

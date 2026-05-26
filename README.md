@@ -22,7 +22,8 @@
 | 后端 | FastAPI | 异步 REST API |
 | 多智能体 | LangGraph | 智能体编排框架 |
 | 数据库 | SQLite + ChromaDB | 关系 + 向量检索 |
-| 大模型 | 科大讯飞星火 v3.5 | 内容生成与对话 |
+| 大模型 | 科大讯飞星火 v3.5 | 资源生成（ResourceAgent） |
+| 大模型 | DeepSeek | 画像提取 / 路径规划 / 评估 / 对话（ProfileAgent / PathAgent / EvaluationAgent / TutorAgent） |
 | AI 辅助 | Claude Code | 代码辅助开发 |
 
 > **注意**：开发过程使用了 Anthropic Claude Code 作为 AI 辅助编程工具，
@@ -39,7 +40,19 @@
 pip install -r requirements.txt
 ```
 
-### 配置讯飞星火 API
+### 配置大模型 API
+
+#### DeepSeek（对话 / 画像 / 路径 / 评估）
+1. 前往 [DeepSeek 开放平台](https://platform.deepseek.com/) 注册并获取 API Key
+2. 在 `.env` 中设置：
+```bash
+DEEPSEEK_API_KEY=你的DeepSeek_API_Key
+# 可选：
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+```
+
+#### 讯飞星火（资源生成）
 1. 前往 [讯飞开放平台](https://console.xfyun.cn/) 注册并创建应用
 2. 获取 APP_ID, API_KEY, API_SECRET
 3. 设置环境变量：

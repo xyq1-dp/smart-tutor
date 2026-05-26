@@ -16,8 +16,10 @@ async def trigger_evaluation(req: EvaluateRequest):
     """触发一次学习效果评估"""
     from backend.db.models import ensure_user, get_profile
     from backend.agents.evaluation_agent import evaluate_learning
+    from backend.db.knowledge_tracing import ensure_user_knowledge_state
 
     ensure_user(req.user_id)
+    ensure_user_knowledge_state(req.user_id)
     profile = get_profile(req.user_id)
 
     if not profile or not profile.get("learning_goal"):
@@ -55,6 +57,23 @@ async def trigger_evaluation(req: EvaluateRequest):
 
     result["assessment_id"] = assessment_id
     return result
+
+
+@router.post("/assessment/diagnostic")
+async def submit_diagnostic(req: EvaluateRequest):
+    """根据诊断测试结果初始化知识状态"""
+    from backend.db.models import ensure_user, get_diagnostic_results
+    from backend.db.knowledge_tracing import run_diagnostic_init
+
+    ensure_user(req.user_id)
+    summary = run_diagnostic_init(req.user_id)
+    diagnostic = get_diagnostic_results(req.user_id)
+
+    return {
+        "user_id": req.user_id,
+        "knowledge_summary": summary,
+        "diagnostic_results": diagnostic,
+    }
 
 
 @router.get("/assessment/{user_id}")

@@ -10,7 +10,7 @@
 6. 兴趣方向（interest_areas）
 """
 
-from backend.llm.spark import spark_chat
+from backend.llm.deepseek import deepseek_chat
 import json
 
 
@@ -61,12 +61,27 @@ async def extract_profile_from_chat(
     long_term = get_profile_long_term_memory(user_id)
     memory_text = f"该学生的历史关键信息（请结合当前对话综合判断）：\n{long_term}" if long_term else ""
 
+    # 注入KC知识状态辅助判断真实水平
+    try:
+        from backend.db.knowledge_tracing import get_knowledge_level_from_state, get_chapter_mastery_text
+        estimated_level = get_knowledge_level_from_state(user_id)
+        mastery_text = get_chapter_mastery_text(user_id)
+        if estimated_level:
+            state_hint = (
+                f"\n[系统推断] 根据43个知识点的掌握概率，该学生整体水平约为：{estimated_level}\n"
+                f"各章节掌握度：\n{mastery_text}\n"
+                f"请将以上数据作为参考，结合对话内容综合判断学生的真实水平。"
+            )
+            memory_text = state_hint + "\n" + memory_text if memory_text else state_hint
+    except Exception:
+        pass
+
     prompt = PROFILE_EXTRACTION_PROMPT.format(
         conversation=conversation,
         long_term_memory=memory_text,
     )
 
-    result = await spark_chat(
+    result = await deepseek_chat(
         [{"role": "user", "content": prompt}],
         temperature=0.1,
     )
@@ -111,7 +126,7 @@ async def update_profile_dimension(
   "reason": "更新的理由（一句话）"
 }}
 """
-    result = await spark_chat([{"role": "user", "content": prompt}], temperature=0.1)
+    result = await deepseek_chat([{"role": "user", "content": prompt}], temperature=0.1)
 
     try:
         start = result.find("{")

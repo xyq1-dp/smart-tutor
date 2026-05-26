@@ -46,12 +46,13 @@ async def get_personalized_path(user_id: str):
         return _default_path("画像未建立，显示默认路径")
 
     try:
-        # 注入评估数据 + 学习进度增强画像
-        from backend.db.models import get_latest_assessment, get_chapter_progress
+        # 注入评估数据 + KC级学习掌握度
+        from backend.db.models import get_latest_assessment
+        from backend.db.knowledge_tracing import get_chapter_mastery_map
         assessment = get_latest_assessment(user_id)
-        chapter_progress = get_chapter_progress(user_id)
+        chapter_mastery = get_chapter_mastery_map(user_id)
         enriched_profile = dict(profile)
-        enriched_profile["_chapter_progress"] = chapter_progress
+        enriched_profile["_chapter_mastery"] = chapter_mastery
         if assessment:
             suggestions_str = assessment.get("suggestions", "")
             if isinstance(suggestions_str, str):
@@ -117,8 +118,11 @@ async def regenerate_path(req: PathRequest):
 
     try:
         from backend.db.models import get_latest_assessment
+        from backend.db.knowledge_tracing import get_chapter_mastery_map
         assessment = get_latest_assessment(req.user_id)
+        chapter_mastery = get_chapter_mastery_map(req.user_id)
         enriched_profile = dict(profile)
+        enriched_profile["_chapter_mastery"] = chapter_mastery
         if assessment:
             suggestions_str = assessment.get("suggestions", "")
             if isinstance(suggestions_str, str):

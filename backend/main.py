@@ -35,6 +35,9 @@ app.include_router(executor_router, prefix="/api")
 @app.on_event("startup")
 async def startup():
     init_db()
+    # 初始化知识图谱（43个知识点）
+    from backend.db.models import init_knowledge_components
+    init_knowledge_components()
     # 自动索引知识库（增量，跳过已索引的）
     from backend.db.vector_store import auto_index_knowledge_base
     try:

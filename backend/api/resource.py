@@ -72,17 +72,26 @@ async def generate_resource(req: ResourceRequest):
         except Exception as e:
             result = {"topic": req.topic, "resources": {}, "errors": [str(e)]}
 
-        # 记录学习行为 + 更新学习进度
+        # 记录学习行为 + 更新KC级知识状态 + 资源参与度
         try:
-            from backend.db.models import record_behavior, detect_topic_chapter, update_topic_progress
+            from backend.db.models import record_behavior, record_resource_engagement
+            from backend.db.knowledge_tracing import infer_kc_from_text, update_kc_mastery
+
             record_behavior(req.user_id, "resource_generate", {
                 "topic": req.topic,
                 "types": requested,
                 "success_count": len(result.get("resources", {})),
             })
-            chapter = detect_topic_chapter(req.topic)
-            if chapter:
-                update_topic_progress(req.user_id, chapter, "in_progress")
+
+            record_resource_engagement(
+                user_id=req.user_id,
+                resource_type=",".join(requested),
+                topic=req.topic,
+            )
+
+            kcs = infer_kc_from_text(req.topic)
+            for kc in kcs[:5]:
+                update_kc_mastery(req.user_id, kc, quality_score=0.3)
         except Exception:
             pass
 

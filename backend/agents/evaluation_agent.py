@@ -3,7 +3,7 @@
 """
 
 import json
-from backend.llm.spark import spark_chat
+from backend.llm.deepseek import deepseek_chat
 
 
 EVALUATION_PROMPT = """你是一位教育评估专家。请根据以下数据对学生的学习效果进行多维度评估。
@@ -16,6 +16,24 @@ EVALUATION_PROMPT = """你是一位教育评估专家。请根据以下数据对
 - 行为类型分布：{type_counts}
 - 最近活跃：{last_active}
 - 接触过的知识点：{topics_touched}
+
+## 知识点级掌握度（43个知识点）
+- 已掌握(P≥0.6): {mastered_count} 个
+- 学习中(0.3≤P<0.6): {learning_count} 个
+- 薄弱(P<0.3): {weak_count} 个
+- 平均掌握概率：{average_mastery}
+
+## 各章节掌握度
+{chapter_mastery_text}
+
+## 薄弱知识点列表
+{weak_list}
+
+## 错误模式分析
+{error_patterns}
+
+## 资源参与度
+{engagement_text}
 
 ## 最近对话记录
 {chat_summary}
@@ -106,6 +124,14 @@ async def evaluate_learning(user_id: str) -> dict:
     chat_history = get_chat_history(user_id, limit=30)
     last_assessment = get_latest_assessment(user_id)
 
+    # 获取KC级知识状态
+    from backend.db.knowledge_tracing import get_kc_mastery_stats, get_chapter_mastery_map
+    from backend.db.models import get_error_patterns, get_engagement_summary
+    kc_stats = get_kc_mastery_stats(user_id)
+    chapter_mastery = get_chapter_mastery_map(user_id)
+    error_patterns = get_error_patterns(user_id)
+    engagement = get_engagement_summary(user_id)
+
     # 构建画像文本
     profile_parts = []
     for key, label in [
@@ -148,6 +174,32 @@ async def evaluate_learning(user_id: str) -> dict:
     total_behaviors = summary.get("total_behaviors", 0)
     is_cold_start = total_behaviors < 10 and not last_assessment
 
+    # 构建KC级掌握度文本
+    kc_summary = kc_stats.get("summary", {})
+    mastered_count = kc_summary.get("mastered_count", 0)
+    learning_count = kc_summary.get("total_kcs", 43) - mastered_count - kc_summary.get("weak_count", 0)
+    weak_count = kc_summary.get("weak_count", 0)
+    average_mastery = kc_summary.get("average_mastery", 0)
+
+    chapter_mastery_text = "\n".join(
+        f"- {ch}: {p:.0%}" for ch, p in chapter_mastery.items()
+    ) if chapter_mastery else "暂无数据"
+
+    weak_list_text = "\n".join(
+        f"- {w['name']} (掌握度: {w['mastery_probability']:.0%})"
+        for w in kc_stats.get("weak", [])[:10]
+    ) or "暂无"
+
+    error_text = "\n".join(
+        f"- {etype}: {cnt}次" for etype, cnt in error_patterns.items()
+    ) if error_patterns else "暂无错误记录"
+
+    engagement_text = (
+        f"总互动{engagement.get('total_engagements', 0)}次，"
+        f"平均停留{engagement.get('avg_duration_seconds', 0)}秒，"
+        f"回访{engagement.get('total_revisits', 0)}次"
+    ) if engagement.get("total_engagements", 0) > 0 else "暂无资源互动"
+
     if is_cold_start:
         prompt = COLD_START_PROMPT.format(
             profile_text=profile_text,
@@ -163,12 +215,20 @@ async def evaluate_learning(user_id: str) -> dict:
             type_counts=json.dumps(summary.get("type_counts", {}), ensure_ascii=False),
             last_active=summary.get("last_active", "未知"),
             topics_touched=", ".join(summary.get("topics_touched", [])) or "暂无",
+            mastered_count=mastered_count,
+            learning_count=learning_count,
+            weak_count=weak_count,
+            average_mastery=f"{average_mastery:.0%}",
+            chapter_mastery_text=chapter_mastery_text,
+            weak_list=weak_list_text,
+            error_patterns=error_text,
+            engagement_text=engagement_text,
             chat_summary=chat_summary or "暂无对话记录",
             path_progress=path_progress,
             last_assessment=last_assessment_text,
         )
 
-    result = await spark_chat(
+    result = await deepseek_chat(
         [{"role": "user", "content": prompt}],
         temperature=0.3,
     )
@@ -184,36 +244,25 @@ async def evaluate_learning(user_id: str) -> dict:
 
 
 def _get_path_progress(user_id: str) -> str:
-    """获取当前学习路径进度（简版）"""
-    from backend.db.models import get_behaviors
-    import json as _json
+    """获取当前学习路径进度（基于KC掌握度，简版）"""
+    from backend.db.knowledge_tracing import get_chapter_mastery_map, CHAPTER_NAMES
 
-    behaviors = get_behaviors(user_id, limit=200)
-    topics_viewed = set()
-    for b in behaviors:
-        try:
-            d = b.get("detail", "{}")
-            if isinstance(d, str):
-                d = _json.loads(d)
-            topic = d.get("topic", "")
-            if topic:
-                topics_viewed.add(topic)
-        except (_json.JSONDecodeError, ValueError, TypeError):
-            pass
+    mastery = get_chapter_mastery_map(user_id)
+    if not mastery:
+        return "暂无学习记录"
 
-    all_stages = [
-        "Python 基础语法", "流程控制", "函数与模块",
-        "数据结构", "面向对象编程", "综合项目实战",
-    ]
-
-    completed = []
+    all_stages = list(CHAPTER_NAMES.values())
+    lines = ["各章节掌握度："]
     for stage in all_stages:
-        for t in topics_viewed:
-            if any(kw in t for kw in _stage_keywords(stage)):
-                completed.append(stage)
-                break
-
-    return f"课程阶段：{' → '.join(all_stages)}\n已接触：{', '.join(completed) if completed else '暂无'}"
+        p = mastery.get(stage, 0)
+        if p >= 0.6:
+            status = "已掌握"
+        elif p >= 0.3:
+            status = "学习中"
+        else:
+            status = "未开始"
+        lines.append(f"- {stage}：{status} ({p:.0%})")
+    return "\n".join(lines)
 
 
 def _stage_keywords(stage: str) -> list[str]:
